@@ -5,3 +5,8 @@ description = "Fill logins from your password managers; add pass, rbw, bitwarden
 # Fills login forms on the site you're on, and only that site. It runs no
 # programs: the password manager plugins do.
 pages = ["*"]
+
+[[option]]
+name = "submit"
+type = "bool"
+description = "Press the form's button after :password-fill"

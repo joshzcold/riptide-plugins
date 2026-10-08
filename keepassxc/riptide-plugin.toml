@@ -6,3 +6,30 @@ dependencies = ["passwords"]
 [permissions]
 # Runs keepassxc-cli.
 spawn = true
+
+[[option]]
+name = "database"
+type = "path"
+description = "Your .kdbx file"
+required = true
+
+[[option]]
+name = "keyfile"
+type = "path"
+description = "Its key file, if it has one"
+
+[[option]]
+name = "remember"
+type = "number"
+default = 0
+description = "Seconds to keep the database password in memory after asking"
+
+[[option]]
+name = "command"
+type = "path"
+description = "The keepassxc-cli program, if it isn't on your PATH"
+
+[[option]]
+name = "password"
+type = "secret"
+description = "The database password, kept in the OS keyring so it doesn't ask; leave unset to be asked"

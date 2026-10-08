@@ -6,3 +6,13 @@ dependencies = ["passwords"]
 [permissions]
 # Runs the Bitwarden CLI.
 spawn = true
+
+[[option]]
+name = "command"
+type = "path"
+description = "The bw program, if it isn't on your PATH"
+
+[[option]]
+name = "master_password"
+type = "secret"
+description = "Your master password, kept in the OS keyring so it doesn't ask; leave unset to be asked"

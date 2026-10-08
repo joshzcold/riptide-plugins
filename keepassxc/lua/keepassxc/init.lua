@@ -56,15 +56,25 @@ function M.new(opts)
       return cb(cached)
     end
     cached = nil
-    rt.ui.input({ prompt = "KeePassXC database password", secret = true }, function(password)
-      if not password then
-        return cb(nil)
-      end
-      if remember > 0 then
-        cached, cached_at = password, os.time()
-      end
-      cb(password)
-    end)
+    local function ask()
+      rt.ui.input({ prompt = "KeePassXC database password", secret = true }, function(password)
+        if not password then
+          return cb(nil)
+        end
+        if remember > 0 then
+          cached, cached_at = password, os.time()
+        end
+        cb(password)
+      end)
+    end
+    -- The password saved on the Plugins tab, from the OS keyring (riptide 0.4+).
+    if rt.secret then
+      rt.secret.get("password", function(password)
+        if password then cb(password) else ask() end
+      end)
+    else
+      ask()
+    end
   end
 
   function backend.find(host, cb)

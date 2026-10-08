@@ -6,3 +6,18 @@ dependencies = ["passwords"]
 [permissions]
 # Runs pass or gopass.
 spawn = true
+
+[[option]]
+name = "store"
+type = "path"
+description = "The password store, if not $PASSWORD_STORE_DIR or ~/.password-store"
+
+[[option]]
+name = "gopass"
+type = "bool"
+description = "Use gopass instead of pass"
+
+[[option]]
+name = "command"
+type = "path"
+description = "The pass or gopass program, if it isn't on your PATH"
