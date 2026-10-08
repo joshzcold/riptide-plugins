@@ -90,17 +90,6 @@ function M.each(items, step, finish)
   end
 end
 
--- The home folder, for "~/" in paths; set once setup has asked the shell.
-M.home = nil
-
--- `path` with a leading "~/" made absolute.
-function M.expand(path)
-  if path and M.home and path:sub(1, 2) == "~/" then
-    return M.home .. path:sub(2)
-  end
-  return path
-end
-
 -- Helpers for running the tools.
 
 -- Lines of `text`, without empty ones.
@@ -112,10 +101,11 @@ function M.lines(text)
   return out
 end
 
--- Run a tool; `done(stdout)` on success, `failed(message)` otherwise. The
--- message is the tool's first error line, never its output.
-function M.run(argv, opts, done, failed)
-  rt.spawn(argv, opts or {}, function(r)
+-- Run a tool with `spawn`, the calling plugin's own rt.spawn (this core may
+-- not run programs); `done(stdout)` on success, `failed(message)` otherwise.
+-- The message is the tool's first error line, never its output.
+function M.run(spawn, argv, opts, done, failed)
+  spawn(argv, opts or {}, function(r)
     if r.error then
       return failed("couldn't run " .. argv[1] .. ": " .. r.error)
     end

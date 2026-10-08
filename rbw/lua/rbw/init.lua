@@ -1,7 +1,8 @@
--- rbw, the unofficial Bitwarden client, unlocked by its own agent. Its search
--- matches anywhere in an entry, so each result's saved addresses (or its name)
--- must belong to the site.
-local site = require("passwords.site")
+-- rbw, the unofficial Bitwarden client, for the passwords plugin. rbw's own
+-- agent keeps the vault unlocked. Its search matches anywhere in an entry, so
+-- each result's saved addresses (or its name) must belong to the site.
+local passwords = require("passwords")
+local site = passwords.site
 
 local M = {}
 
@@ -10,7 +11,7 @@ function M.new(opts)
   local backend = {}
 
   function backend.find(host, cb)
-    site.run({ cmd, "search", "--fields", "id,name,user", site.search_term(host) }, nil, function(out)
+    site.run(rt.spawn, { cmd, "search", "--fields", "id,name,user", site.search_term(host) }, nil, function(out)
       local found = {}
       for _, line in ipairs(site.lines(out)) do
         local id, name, user = line:match("^([^\t]*)\t([^\t]*)\t?(.*)$")
@@ -19,7 +20,7 @@ function M.new(opts)
         end
       end
       site.each(found, function(item, done)
-        site.run({ cmd, "get", "--raw", item.id }, nil, function(raw)
+        site.run(rt.spawn, { cmd, "get", "--raw", item.id }, nil, function(raw)
           local ok, cipher = pcall(rt.json.decode, raw)
           local data = ok and type(cipher) == "table" and cipher.data or nil
           if type(data) ~= "table" or not data.password then
@@ -36,7 +37,7 @@ function M.new(opts)
           if data.username and data.username ~= "" then
             label = label .. " (" .. data.username .. ")"
           end
-          done({ id = item.id, label = label, login = { username = data.username, password = data.password } })
+          done({ id = item.id, label = label, saved = saved, login = { username = data.username, password = data.password } })
         end, function() done(nil) end)
       end, function(entries)
         cb(entries)
@@ -49,6 +50,11 @@ function M.new(opts)
   end
 
   return backend
+end
+
+-- Registers with the passwords plugin; rt.pack.add's opts set it up again.
+function M.setup(opts)
+  passwords.register("rbw", M.new(opts or {}))
 end
 
 return M

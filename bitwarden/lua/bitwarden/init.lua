@@ -1,8 +1,9 @@
--- The official Bitwarden CLI. The first fill asks for the master password and
--- unlocks the vault; the session key is kept in memory until riptide quits or
--- :password-lock. The password goes to bw through its environment, never its
--- command line, where other programs could see it.
-local site = require("passwords.site")
+-- The official Bitwarden CLI (bw) for the passwords plugin. The first fill
+-- asks for the master password and unlocks the vault; the session key is kept
+-- in memory until riptide quits or :password-lock. The password goes to bw
+-- through its environment, never its command line, and never leaves this plugin.
+local passwords = require("passwords")
+local site = passwords.site
 
 local M = {}
 
@@ -19,7 +20,7 @@ function M.new(opts)
       if not password or password == "" then
         return cb(nil)
       end
-      site.run({ cmd, "unlock", "--passwordenv", "RT_BW_PASSWORD", "--raw" },
+      site.run(rt.spawn, { cmd, "unlock", "--passwordenv", "RT_BW_PASSWORD", "--raw" },
         { env = { RT_BW_PASSWORD = password } },
         function(out)
           session = out:match("%S+")
@@ -34,7 +35,7 @@ function M.new(opts)
       if not key then
         return cb(nil, err)
       end
-      site.run({ cmd, "list", "items", "--search", site.search_term(host) }, { env = { BW_SESSION = key } },
+      site.run(rt.spawn, { cmd, "list", "items", "--search", site.search_term(host) }, { env = { BW_SESSION = key } },
         function(out)
           local ok, items = pcall(rt.json.decode, out)
           if not ok or type(items) ~= "table" then
@@ -53,7 +54,7 @@ function M.new(opts)
                 if login.username and login.username ~= "" then
                   label = label .. " (" .. login.username .. ")"
                 end
-                table.insert(entries, { label = label, login = { username = login.username, password = login.password } })
+                table.insert(entries, { label = label, saved = saved, login = { username = login.username, password = login.password } })
               end
             end
           end
@@ -81,6 +82,11 @@ function M.new(opts)
   end
 
   return backend
+end
+
+-- Registers with the passwords plugin; rt.pack.add's opts set it up again.
+function M.setup(opts)
+  passwords.register("bitwarden", M.new(opts or {}))
 end
 
 return M

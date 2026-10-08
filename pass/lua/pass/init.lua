@@ -1,8 +1,9 @@
--- pass and gopass: an entry belongs to a site when a part of its path is the
--- site, e.g. websites/example.com/alice. The password is the first line; the
--- username is a "login:", "user:", "username:" or "email:" line, or else the
--- path part after the site.
-local site = require("passwords.site")
+-- pass and gopass for the passwords plugin: an entry belongs to a site when
+-- a part of its path is the site, e.g. websites/example.com/alice. The password
+-- is the first line; the username is a "login:", "user:", "username:" or
+-- "email:" line, or else the path part after the site.
+local passwords = require("passwords")
+local site = passwords.site
 
 local M = {}
 
@@ -38,7 +39,7 @@ cd "$d" && find -L . -name '*.gpg' -print
 ]]
 
 function M.new(opts)
-  local gopass = opts.backend == "gopass"
+  local gopass = opts.gopass == true
   local cmd = opts.command or (gopass and "gopass" or "pass")
   local backend = {}
 
@@ -50,12 +51,12 @@ function M.new(opts)
       argv = { "sh", "-c", LIST_PASS }
       run_opts = { env = { RT_STORE = opts.store or "" } }
     end
-    site.run(argv, run_opts, function(out)
+    site.run(rt.spawn, argv, run_opts, function(out)
       local entries = {}
       for _, line in ipairs(site.lines(out)) do
         local entry = line:gsub("^%./", ""):gsub("%.gpg$", "")
         if site.any_matches(parts_of(entry), host) then
-          table.insert(entries, { id = entry, label = entry })
+          table.insert(entries, { id = entry, label = entry, saved = parts_of(entry) })
         end
       end
       table.sort(entries, function(a, b) return a.id < b.id end)
@@ -64,7 +65,7 @@ function M.new(opts)
   end
 
   function backend.get(entry, cb)
-    site.run({ cmd, "show", entry.id }, nil, function(out)
+    site.run(rt.spawn, { cmd, "show", entry.id }, nil, function(out)
       local password, rest = out:match("^([^\r\n]*)\r?\n?(.*)$")
       if not password or password == "" then
         return cb(nil, entry.id .. " has no password on its first line")
@@ -74,6 +75,11 @@ function M.new(opts)
   end
 
   return backend
+end
+
+-- Registers with the passwords plugin; rt.pack.add's opts set it up again.
+function M.setup(opts)
+  passwords.register("pass", M.new(opts or {}))
 end
 
 return M

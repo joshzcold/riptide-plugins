@@ -1,0 +1,8 @@
+name = "bitwarden"
+description = "Fill logins from the official Bitwarden CLI (bw)"
+# Fills through the passwords plugin, which riptide adds for it.
+dependencies = ["passwords"]
+
+[permissions]
+# Runs the Bitwarden CLI.
+spawn = true

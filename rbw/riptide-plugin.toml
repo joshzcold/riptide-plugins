@@ -1,0 +1,8 @@
+name = "rbw"
+description = "Fill logins from rbw, the unofficial Bitwarden client"
+# Fills through the passwords plugin, which riptide adds for it.
+dependencies = ["passwords"]
+
+[permissions]
+# Runs rbw.
+spawn = true

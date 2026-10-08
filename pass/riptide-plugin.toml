@@ -1,0 +1,8 @@
+name = "pass"
+description = "Fill logins from pass or gopass"
+# Fills through the passwords plugin, which riptide adds for it.
+dependencies = ["passwords"]
+
+[permissions]
+# Runs pass or gopass.
+spawn = true

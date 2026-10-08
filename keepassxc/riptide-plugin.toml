@@ -1,0 +1,8 @@
+name = "keepassxc"
+description = "Fill logins from a KeePassXC database (keepassxc-cli)"
+# Fills through the passwords plugin, which riptide adds for it.
+dependencies = ["passwords"]
+
+[permissions]
+# Runs keepassxc-cli.
+spawn = true
