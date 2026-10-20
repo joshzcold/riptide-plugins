@@ -11,4 +11,8 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "keepassx
 for `remember = 300` seconds; it goes to `keepassxc-cli` on its input. Options:
 `keyfile`, `remember` and `command`.
 
+On riptide 0.4 and newer, you can set these on the Plugins tab instead, and
+save the database password there: it's kept in your OS keyring, and fills
+then don't ask for it.
+
 The [passwords guide](https://joshzcold.github.io/riptide/guide/passwords.html) has the keys and the rest of the options.

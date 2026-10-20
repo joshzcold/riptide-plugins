@@ -16,7 +16,8 @@ function M.new(opts)
     if session then
       return cb(session)
     end
-    rt.ui.input({ prompt = "Bitwarden master password", secret = true }, function(password)
+    -- With the password: unlock, keeping the session key.
+    local function with(password)
       if not password or password == "" then
         return cb(nil)
       end
@@ -27,7 +28,18 @@ function M.new(opts)
           cb(session)
         end,
         function(err) cb(nil, err) end)
-    end)
+    end
+    local function ask()
+      rt.ui.input({ prompt = "Bitwarden master password", secret = true }, with)
+    end
+    -- The master password saved on the Plugins tab, from the OS keyring (riptide 0.4+).
+    if rt.secret then
+      rt.secret.get("master_password", function(password)
+        if password then with(password) else ask() end
+      end)
+    else
+      ask()
+    end
   end
 
   local function search(host, cb, retried)

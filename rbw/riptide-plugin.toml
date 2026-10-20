@@ -1,8 +1,14 @@
 name = "rbw"
 description = "Fill logins from rbw, the unofficial Bitwarden client"
+riptide = ">=0.4"
 # Fills through the passwords plugin, which riptide adds for it.
 dependencies = ["passwords"]
 
 [permissions]
 # Runs rbw.
 spawn = true
+
+[[option]]
+name = "command"
+type = "path"
+description = "The rbw program, if it isn't on your PATH"
