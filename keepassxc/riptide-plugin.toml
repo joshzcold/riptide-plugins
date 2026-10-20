@@ -1,5 +1,6 @@
 name = "keepassxc"
 description = "Fill logins from a KeePassXC database (keepassxc-cli)"
+riptide = ">=0.4"
 # Fills through the passwords plugin, which riptide adds for it.
 dependencies = ["passwords"]
 

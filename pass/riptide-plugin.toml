@@ -1,5 +1,6 @@
 name = "pass"
 description = "Fill logins from pass or gopass"
+riptide = ">=0.4"
 # Fills through the passwords plugin, which riptide adds for it.
 dependencies = ["passwords"]
 
