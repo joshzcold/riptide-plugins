@@ -128,6 +128,9 @@ local function start(field, token)
       elseif r.code ~= 0 then
         local first = (r.stderr or ""):match("[^\r\n]+")
         rt.notify("firenvim: nvim exited with status " .. tostring(r.code) .. (first and (": " .. first) or ""), "error")
+      elseif s.attached then
+        -- The page says when the connection closes, after the last write.
+        return rt.defer(2000, function() finish(s) end)
       end
       finish(s)
     end)

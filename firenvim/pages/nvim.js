@@ -179,6 +179,7 @@ function onMessage([type, ...rest]) {
       }
     } else if (method === "rt_firenvim_write") {
       send("write", { text: params[0] });
+      call("nvim_set_var", ["rt_firenvim_got", params[1]]);
     }
   }
 }

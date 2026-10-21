@@ -210,15 +210,22 @@ function RtFirenvim.start(text, name, line, col, channel)
   vim.cmd("edit " .. vim.fn.fnameescape(file))
   pcall(vim.api.nvim_win_set_cursor, 0, { line, col })
   local buf = vim.api.nvim_get_current_buf()
+  -- Writes sent, and the last one the page has (it sets g:rt_firenvim_got).
+  local sent = 0
   vim.api.nvim_create_autocmd("BufWritePost", {
     buffer = buf,
     callback = function()
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-      vim.rpcnotify(channel, "rt_firenvim_write", table.concat(lines, "\n"))
+      sent = sent + 1
+      vim.rpcnotify(channel, "rt_firenvim_write", table.concat(lines, "\n"), sent)
     end,
   })
   vim.api.nvim_create_autocmd("VimLeavePre", {
-    callback = function() vim.fn.delete(dir, "rf") end,
+    callback = function()
+      -- :wq quits right after writing; let the page get the text first.
+      vim.wait(2000, function() return (vim.g.rt_firenvim_got or 0) >= sent end, 10)
+      vim.fn.delete(dir, "rf")
+    end,
   })
 end
 ]==]
