@@ -45,6 +45,6 @@ plugin's page only. The page draws nvim's screen and sends it your keys and
 clicks over nvim's own RPC. nvim quits when the page closes, or if the page
 never connects.
 
-It needs riptide 0.4.1 or newer, for float pages that cover a field and take
+It needs riptide 0.5 or newer, for float pages that cover a field and take
 every key, and for `network = ["127.0.0.1"]`. It asks to run programs (nvim),
 to read and fill fields on every site, and to connect to 127.0.0.1.

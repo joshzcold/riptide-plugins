@@ -1,7 +1,7 @@
 name = "firenvim"
 description = "Edit text fields in nvim, drawn over the field"
 # Float pages over a field that take every key, and WebSockets to 127.0.0.1.
-riptide = ">=0.4.1"
+riptide = ">=0.5"
 
 [permissions]
 # Runs nvim.

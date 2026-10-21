@@ -29,6 +29,13 @@ jobs:
           for dir in */; do
             [ -d "$dir/test" ] || continue
             echo "== ${dir%/}"
-            xvfb-run -a riptide --plugin-test "$dir" || status=1
+            xvfb-run -a riptide --plugin-test "$dir" 2>&1 | tee test.log
+            [ "${PIPESTATUS[0]}" -eq 0 ] && continue
+            # A plugin for the next release waits until the nightly is that version.
+            if grep -q "needs riptide .*; update riptide" test.log; then
+              echo "::warning::${dir%/} skipped: $(grep -o "needs riptide .*" test.log | head -1)"
+            else
+              status=1
+            fi
           done
           exit $status
