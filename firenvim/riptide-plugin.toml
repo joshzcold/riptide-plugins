@@ -1,0 +1,39 @@
+name = "firenvim"
+description = "Edit text fields in nvim, drawn over the field"
+# Float pages over a field that take every key, and WebSockets to 127.0.0.1.
+riptide = ">=0.5"
+
+[permissions]
+# Runs nvim.
+spawn = true
+# Reads the focused field and puts nvim's text back in it.
+pages = ["*"]
+# Its page talks to that nvim on this computer.
+network = ["127.0.0.1"]
+
+[[option]]
+name = "auto"
+type = "choice"
+choices = ["off", "textarea", "all"]
+default = "off"
+description = "Open nvim by itself on focusing a text area, or any text field"
+
+[[option]]
+name = "key"
+description = "The key that opens nvim on the focused field (insert and normal mode)"
+default = "<Ctrl-Shift-e>"
+
+[[option]]
+name = "command"
+type = "path"
+description = "The nvim program, if it isn't on your PATH"
+
+[[option]]
+name = "font"
+description = "The CSS font nvim is drawn in"
+default = "13px monospace"
+
+[[option]]
+name = "extension"
+description = "The file extension nvim sees, for its filetype"
+default = "txt"

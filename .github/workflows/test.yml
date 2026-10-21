@@ -18,12 +18,24 @@ jobs:
           gh release download nightly -R joshzcold/riptide -p '*-linux-x86_64.tar.gz' -O riptide.tar.gz
           mkdir riptide && tar -xzf riptide.tar.gz -C riptide --strip-components=1
           echo "$PWD/riptide" >> "$GITHUB_PATH"
+      - name: Install nvim
+        run: |
+          # For firenvim's tests.
+          curl -fsSL https://github.com/neovim/neovim/releases/download/v0.11.3/nvim-linux-x86_64.tar.gz | tar -xz
+          echo "$PWD/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
       - name: Test every plugin with tests
         run: |
           status=0
           for dir in */; do
             [ -d "$dir/test" ] || continue
             echo "== ${dir%/}"
-            xvfb-run -a riptide --plugin-test "$dir" || status=1
+            xvfb-run -a riptide --plugin-test "$dir" 2>&1 | tee test.log
+            [ "${PIPESTATUS[0]}" -eq 0 ] && continue
+            # A plugin for the next release waits until the nightly is that version.
+            if grep -q "needs riptide .*; update riptide" test.log; then
+              echo "::warning::${dir%/} skipped: $(grep -o "needs riptide .*" test.log | head -1)"
+            else
+              status=1
+            fi
           done
           exit $status

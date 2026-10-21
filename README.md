@@ -21,6 +21,7 @@ them and checks for updates.
 | [bitwarden](bitwarden) | Logins from the official Bitwarden CLI |
 | [keepassxc](keepassxc) | Logins from a KeePassXC database |
 | [reading-list](reading-list) | Save pages to read later |
+| [firenvim](firenvim) | Edit text fields in nvim, drawn over the field |
 
 ## Writing one
 
