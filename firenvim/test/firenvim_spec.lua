@@ -1,0 +1,84 @@
+-- Run with: riptide --plugin-test firenvim
+-- Needs nvim on PATH; test/bin/nvim-clean runs it without your config.
+local function firenvim() return require("firenvim") end
+
+-- A value from the page, through the page's own JavaScript.
+local function js(code)
+  local value, done
+  rt.page.eval(code, function(v)
+    value, done = v, true
+  end)
+  wait_until(function() return done end)
+  return value
+end
+
+local function field(id)
+  return js("document.getElementById('" .. id .. "').value")
+end
+
+local function open_notes()
+  run("open " .. page("textarea.html"))
+  wait_for("load_finished", { pattern = "plugin-test.localhost" })
+end
+
+local function attached()
+  wait_until(function()
+    local s = firenvim().session()
+    return s and s.attached
+  end, 6000)
+  return firenvim().session()
+end
+
+describe("firenvim", function()
+  it("edits the focused text area in nvim and puts it back on :w", function()
+    open_notes()
+    js("document.getElementById('notes').focus()")
+    run("firenvim")
+    local nvim = attached()
+    assert.equals("first line\nsecond", field("notes"), "nothing changes before :w")
+
+    nvim.input("GA!<Esc>:w<CR>")
+    wait_until(function() return field("notes") == "first line\nsecond!" end)
+
+    nvim.input(":q<CR>")
+    wait_until(function() return firenvim().session() == nil end)
+    assert.equals("notes", js("document.activeElement.id"), "the field has the focus again")
+  end)
+
+  it("puts nothing back when nvim quits without writing", function()
+    open_notes()
+    js("document.getElementById('title').focus()")
+    run("firenvim")
+    attached().input("ccchanged<Esc>:q!<CR>")
+    wait_until(function() return firenvim().session() == nil end)
+    assert.equals("a title", field("title"))
+  end)
+
+  it("opens by itself on a text area with auto, but not on an input", function()
+    firenvim().setup({ auto = "textarea", command = plugin_test.dir .. "/test/bin/nvim-clean" })
+    -- Focus from the page's script then enters insert mode, as a click does.
+    rt.set("input.insert_mode.auto_load", true)
+    open_notes()
+    js("document.getElementById('title').focus()")
+    wait(1000)
+    assert.equals(nil, firenvim().session(), "an input isn't a text area")
+
+    -- Leaving the input leaves insert mode, so the text area enters it again.
+    js("document.activeElement.blur()")
+    wait(300)
+    js("document.getElementById('notes').focus()")
+    attached().input(":q<CR>")
+    wait_until(function() return firenvim().session() == nil end)
+    -- Focus is back on the text area, which doesn't open it again.
+    wait(1000)
+    assert.equals(nil, firenvim().session())
+    firenvim().setup({ command = plugin_test.dir .. "/test/bin/nvim-clean" })
+  end)
+
+  it("says so when no text field has the focus", function()
+    open_notes()
+    clear_messages()
+    run("firenvim")
+    wait_until(function() return last_message() == "firenvim: focus a text field first" end)
+  end)
+end)

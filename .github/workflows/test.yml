@@ -18,6 +18,11 @@ jobs:
           gh release download nightly -R joshzcold/riptide -p '*-linux-x86_64.tar.gz' -O riptide.tar.gz
           mkdir riptide && tar -xzf riptide.tar.gz -C riptide --strip-components=1
           echo "$PWD/riptide" >> "$GITHUB_PATH"
+      - name: Install nvim
+        run: |
+          # For firenvim's tests.
+          curl -fsSL https://github.com/neovim/neovim/releases/download/v0.11.3/nvim-linux-x86_64.tar.gz | tar -xz
+          echo "$PWD/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
       - name: Test every plugin with tests
         run: |
           status=0
