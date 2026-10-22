@@ -1,0 +1,14 @@
+name = "telescope"
+description = "Fuzzy-find open tabs, history, bookmarks and quickmarks, like telescope.nvim"
+# rt.history, rt.bookmarks, rt.quickmarks, rt.select_tab and centred float pages.
+riptide = ">=0.8"
+
+[permissions]
+# Lists your history, bookmarks and quickmarks to pick from.
+history = true
+
+[[option]]
+name = "keys"
+type = "bool"
+default = true
+description = "Bind <Space>ff (everything), <Space>ft (tabs), <Space>fh (history), <Space>fb (bookmarks) and <Space>fq (quickmarks)"
