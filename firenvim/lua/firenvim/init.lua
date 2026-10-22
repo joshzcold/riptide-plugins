@@ -53,8 +53,12 @@ local function field_js(token, auto)
     text, line: before.length, col: new TextEncoder().encode(before[before.length - 1]).length,
     rect: { x: r.left, y: r.top, width: r.width, height: r.height },
     viewport: { width: innerWidth, height: innerHeight },
+    top: window === window.top,
     name: location.hostname + "_" + (el.id || el.name || el.tagName.toLowerCase()),
-    host: location.hostname,
+    // In a frame, choices still belong to the tab's site, e.g. mail.google.com.
+    host: location.ancestorOrigins?.length
+      ? new URL(location.ancestorOrigins[location.ancestorOrigins.length - 1]).hostname
+      : location.hostname,
     // The same field on every page of the site, e.g. each issue's comment box.
     field: kind + ":" + (el.name || el.getAttribute("aria-label") || el.placeholder || el.id || el.tagName.toLowerCase()),
     label: el.getAttribute("aria-label") || el.placeholder || el.name || el.id || "",
@@ -155,22 +159,31 @@ local function cover(field)
   local r, view = field.rect, field.viewport
   local width = math.max(r.width, MIN_WIDTH)
   local height = math.max(r.height, MIN_HEIGHT)
+  if not field.top then
+    -- In a frame: riptide places it in the page and keeps it there.
+    return { x = r.x, y = r.y, width = width, height = height, frame = field.frame }
+  end
   local x = math.max(0, math.min(r.x, view.width - width))
   local y = math.max(0, math.min(r.y, view.height - height))
   return { x = x, y = y, width = width, height = height }
+end
+
+-- Runs in the field's frame, which may be an iframe.
+local function eval_in(field, code, fn)
+  rt.page.eval(code, fn or function() end, { frame = field.frame })
 end
 
 local function finish(s)
   if session ~= s then return end
   session = nil
   s.page:close()
-  rt.page.eval(refocus_js(s.token), function() end)
+  eval_in(s.field, refocus_js(s.token))
 end
 
 local ask_to_ignore
 
 local function start(field, token, auto)
-  local s = { token = token, attempts = 0 }
+  local s = { token = token, attempts = 0, field = field }
   session = s
 
   local function launch()
@@ -249,7 +262,7 @@ local function start(field, token, auto)
       elseif name == "attached" then
         s.attached = true
       elseif name == "write" then
-        rt.page.eval(write_js(token, data.text or ""), function(ok, err)
+        eval_in(field, write_js(token, data.text or ""), function(ok, err)
           if not ok then
             rt.notify("firenvim: couldn't put the text back: " .. (err or "the field is gone"), "error")
           end
@@ -291,7 +304,7 @@ end
 -- Auto mode on a field, unless it was told to leave it alone.
 local function auto_open(field, token)
   if rule(field) == "never" then
-    return rt.page.eval(skip_js(token), function() end)
+    return eval_in(field, skip_js(token))
   end
   start(field, token, true)
 end
@@ -300,7 +313,9 @@ end
 function M.open(auto)
   if session then return end
   local token = hex(16)
-  rt.page.eval(field_js(token, auto), function(field, err)
+  -- The focused frame: fields in iframes too, e.g. Gmail's chat box.
+  rt.page.eval(field_js(token, auto), function(field, err, frame)
+    if field then field.frame = frame end
     if session then return end
     if not field then
       if not auto then
@@ -310,7 +325,7 @@ function M.open(auto)
     end
     if auto then return auto_open(field, token) end
     start(field, token)
-  end)
+  end, { frame = "focused" })
 end
 
 -- Forget what auto mode was told for the current site.

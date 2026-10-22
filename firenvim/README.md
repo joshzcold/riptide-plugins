@@ -20,6 +20,9 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "firenvim
 } })
 ```
 
+It works on fields inside iframes too, such as Gmail's chat message box,
+and in open shadow roots. Fields in iframes need riptide 0.7.
+
 nvim follows its field as the page scrolls. Drag nvim's bar to move it, or
 the grip in its bottom right corner to resize it; the plugin keeps the place
 (next to the field) and the size for that field on that site, and opens nvim
