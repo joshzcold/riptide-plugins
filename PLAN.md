@@ -1,30 +1,10 @@
 # Plan: more Vim and Neovim favourites as riptide plugins
 
-[firenvim](firenvim), [telescope](telescope), [harpoon](harpoon) and
-[oil](oil) are done. These are next, in order. Each entry says what it is, how it would work in riptide, and what
+[firenvim](firenvim), [telescope](telescope), [harpoon](harpoon), [oil](oil)
+and [flash](flash) are done. These are next, in order. Each entry says what it is, how it would work in riptide, and what
 riptide would need that plugins can't do today.
 
-## 1. flash jumping
-
-Like [flash.nvim](https://github.com/folke/flash.nvim) and
-[leap.nvim](https://github.com/ggandor/leap.nvim): type a couple of
-characters, and every place they appear in the visible text gets a label;
-type the label to jump there.
-
-- `s` then two characters labels the matches; the label puts the caret
-  there in caret mode, so `v` and `y` can select and copy from it. `S` does
-  the same but follows a link at the match, if there is one.
-- **Riptide:**
-  - Matching and labels can be drawn by the plugin with `rt.page.eval` and
-    `rt.page.css`, in the main frame and, with riptide#46, the focused frame.
-  - Starting caret mode at a given place needs riptide to take a text
-    position, e.g. `rt.page.caret_at(...)`, or the plugin selecting the
-    match in the page before running caret mode (which needs `commands`).
-- **Open question:** frames. Labels across several cross-origin frames need
-  `rt.page.eval` in every frame, like hints, rather than one frame.
-- **Size:** medium.
-
-## 2. search and translate the selection
+## 1. search and translate the selection
 
 Like [Surfingkeys](https://github.com/brookhong/Surfingkeys)' selection
 search.
@@ -39,7 +19,7 @@ search.
   for plugins yet), or `rt.spawn` of a command such as `trans`.
 - **Size:** small for search; translation depends on the service.
 
-## 3. reader mode
+## 2. reader mode
 
 Like [zen-mode.nvim](https://github.com/folke/zen-mode.nvim) for pages: the
 article alone, in clean type.
@@ -63,3 +43,10 @@ article alone, in clean type.
 - **Preview:** show the page beside the list. Plugin pages can only frame
   `https` hosts listed in `frames`, so this would need riptide to render a
   preview itself.
+
+## Flash follow-ups
+
+- **Frames:** label text inside iframes too, with `rt.page.eval` in each
+  frame, placing labels with each frame's offset as hints do.
+- **Labels after the match**, as flash.nvim draws them, rather than over
+  its first character.
