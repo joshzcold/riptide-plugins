@@ -23,6 +23,8 @@ jobs:
           # For firenvim's tests.
           curl -fsSL https://github.com/neovim/neovim/releases/download/v0.11.3/nvim-linux-x86_64.tar.gz | tar -xz
           echo "$PWD/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+          # Its first start is slow; the specs have 10 s each.
+          ./nvim-linux-x86_64/bin/nvim --headless --clean +qa
       - name: Test every plugin with tests
         run: |
           status=0

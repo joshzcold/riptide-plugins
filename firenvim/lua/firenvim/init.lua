@@ -177,13 +177,16 @@ local function finish(s)
   if session ~= s then return end
   session = nil
   s.page:close()
-  eval_in(s.field, refocus_js(s.token))
+  if s.target.finished then s.target.finished() end
 end
 
 local ask_to_ignore
 
-local function start(field, token, auto)
-  local s = { token = token, attempts = 0, field = field }
+-- Run nvim on `t`'s text in a float. `t` gives the text and where the float
+-- goes, and hears about writes (`write`), filetype changes (`filetype`) and
+-- the end (`finished`).
+local function run(t, token)
+  local s = { token = token, attempts = 0, target = t }
   session = s
 
   local function launch()
@@ -219,67 +222,118 @@ local function start(field, token, auto)
 
   function s.dismiss()
     finish(s)
-    ask_to_ignore(field)
+    if t.dismissed then t.dismissed() end
   end
 
   function s.start()
     return {
       port = s.port,
       token = token,
-      text = field.text,
-      line = field.line,
-      col = field.col,
-      name = file_name(field.name),
+      text = t.text,
+      line = t.line or 1,
+      col = t.col or 0,
+      name = t.name,
       font = opts.font,
-      filetype = filetype_of(field),
-      -- Auto mode opened it, so it offers to leave the field alone next time.
-      dismiss = auto == true,
+      filetype = t.filetype,
+      dismiss = t.dismissed ~= nil,
     }
   end
 
   launch()
-  s.page = rt.ui.page({
+  local page_opts = {
     path = "index.html",
     where = "float",
-    title = "nvim",
-    over = cover(field),
-    offset = place_of(field),
+    title = t.title or "nvim",
     keys = "all",
-    -- Dragged somewhere else: it opens there, next to this field, next time.
-    on_move = function(x, y) keep_place(field, x, y) end,
     on_message = function(name, data, page)
       if session ~= s then return end
       if name == "ready" then
         s.ready = true
-        local size = size_of(field)
+        local size = t.size
         -- page:resize is newer than riptide 0.5.0.
         if size and page.resize then page:resize(size.width, size.height) end
         page:send("start", s.start())
       elseif name == "resize" then
         if page.resize then page:resize(data.width, data.height) end
       elseif name == "resized" then
-        keep_size(field, data.width, data.height)
+        if t.resized then t.resized(data.width, data.height) end
       elseif name == "attached" then
         s.attached = true
       elseif name == "write" then
-        eval_in(field, write_js(token, data.text or ""), function(ok, err)
-          if not ok then
-            rt.notify("firenvim: couldn't put the text back: " .. (err or "the field is gone"), "error")
-          end
-        end)
+        t.write(data.text or "")
       elseif name == "error" then
         rt.notify("firenvim: " .. tostring(data.message), "error")
         finish(s)
       elseif name == "closed" then
         finish(s)
       elseif name == "filetype" then
-        local ft = data.filetype ~= data.detected and data.filetype ~= "" and data.filetype or nil
-        keep_filetype(field, ft)
+        if t.filetype_set then t.filetype_set(data.filetype, data.detected) end
       elseif name == "dismiss" then
         s.dismiss()
       end
     end,
-  })
+  }
+  for k, v in pairs(t.place) do page_opts[k] = v end
+  s.page = rt.ui.page(page_opts)
+end
+
+-- nvim over a field of the page, which every write fills.
+local function start(field, token, auto)
+  run({
+    text = field.text,
+    line = field.line,
+    col = field.col,
+    name = file_name(field.name),
+    filetype = filetype_of(field),
+    size = size_of(field),
+    place = {
+      over = cover(field),
+      offset = place_of(field),
+      -- Dragged somewhere else: it opens there, next to this field, next time.
+      on_move = function(x, y) keep_place(field, x, y) end,
+    },
+    write = function(text)
+      eval_in(field, write_js(token, text), function(ok, err)
+        if not ok then
+          rt.notify("firenvim: couldn't put the text back: " .. (err or "the field is gone"), "error")
+        end
+      end)
+    end,
+    resized = function(width, height) keep_size(field, width, height) end,
+    filetype_set = function(filetype, detected)
+      keep_filetype(field, filetype ~= detected and filetype ~= "" and filetype or nil)
+    end,
+    finished = function() eval_in(field, refocus_js(token)) end,
+    -- Auto mode opened it, so it offers to leave the field alone next time.
+    dismissed = auto and function() ask_to_ignore(field) end or nil,
+  }, token)
+end
+
+-- Edit `spec.text` in nvim, in a float in the middle of the page, for other
+-- plugins: `spec.on_write(text)` on every write, `spec.on_close()` at the
+-- end. `spec.name` names the file (for its filetype), `spec.title` the float.
+-- Returns a handle whose `set_text(text)` replaces what nvim shows, or nil
+-- if nvim is already open.
+function M.edit(spec)
+  if session then return nil end
+  local token = hex(16)
+  run({
+    text = spec.text or "",
+    line = spec.line,
+    col = spec.col,
+    name = spec.name or "text.txt",
+    filetype = spec.filetype,
+    title = spec.title,
+    place = { position = "center", width = spec.width or 900, height = spec.height or 520 },
+    write = spec.on_write,
+    finished = spec.on_close,
+  }, token)
+  local s = session
+  return {
+    set_text = function(text)
+      if session == s then s.page:send("set_text", { text = text }) end
+    end,
+  }
 end
 
 local CHOICES = {
@@ -348,11 +402,12 @@ end
 
 -- The open editor, for tests: whether nvim is attached, and keys for it.
 function M.session()
-  if not session then return nil end
+  local s = session
+  if not s then return nil end
   return {
-    attached = session.attached == true,
-    input = function(keys) session.page:send("input", { keys = keys }) end,
-    dismiss = session.dismiss,
+    attached = s.attached == true,
+    input = function(keys) if session == s then s.page:send("input", { keys = keys }) end end,
+    dismiss = s.dismiss,
   }
 end
 
