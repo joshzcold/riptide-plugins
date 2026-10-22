@@ -6,5 +6,7 @@ riptide = ">=0.8"
 dependencies = ["firenvim"]
 
 [permissions]
-# Reads and changes your bookmarks and quickmarks.
+# Reads your bookmarks and quickmarks...
 history = true
+# ...and saves them as you edit them.
+marks = true
