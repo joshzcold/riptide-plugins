@@ -12,10 +12,11 @@ local opts = {}
 local bound = {}
 local active
 
--- In the page: label every visible place `wanted` shows, and remember them.
-local FIND_JS = [[(wanted, labelChars) => {
+-- In a frame: every visible place `wanted` shows, remembered for the labels
+-- to come; its number of places. Each frame of the page does this.
+local FIND_JS = [[(wanted) => {
   const key = Symbol.for("riptide.flash");
-  window[key]?.overlay.remove();
+  window[key]?.overlay?.remove();
   const exact = /[A-Z]/.test(wanted);
   const needle = exact ? wanted : wanted.toLowerCase();
   const found = [];
@@ -41,16 +42,21 @@ local FIND_JS = [[(wanted, labelChars) => {
       }
     }
   };
-  walk(document.body || document.documentElement);
+  if (innerWidth > 0 && innerHeight > 0) walk(document.body || document.documentElement);
   found.sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);
-  const chars = [...labelChars];
-  const labels = found.length <= chars.length
-    ? chars.slice(0, found.length)
-    : found.map((_, i) => chars[Math.floor(i / chars.length) % chars.length] + chars[i % chars.length]);
+  window[key] = { found, labels: [] };
+  return found.length;
+}]]
+
+-- In a frame: label its places, in order, with `labels`.
+local DRAW_JS = [[(labels) => {
+  const state = window[Symbol.for("riptide.flash")];
+  if (!state) return false;
+  state.labels = labels;
   const overlay = document.createElement("div");
   overlay.setAttribute("aria-hidden", "true");
   Object.assign(overlay.style, { position: "fixed", inset: "0", pointerEvents: "none", zIndex: "2147483647" });
-  found.forEach((f, i) => {
+  state.found.forEach((f, i) => {
     const tag = document.createElement("span");
     tag.textContent = labels[i];
     Object.assign(tag.style, {
@@ -61,16 +67,16 @@ local FIND_JS = [[(wanted, labelChars) => {
     overlay.appendChild(tag);
   });
   document.documentElement.appendChild(overlay);
-  window[key] = { overlay, found, labels };
-  return labels;
+  state.overlay = overlay;
+  return true;
 }]]
 
--- In the page: act on the place labelled `label`, and take the labels away.
+-- In a frame: act on its place labelled `label`, and take the labels away.
 local ACT_JS = [[(label, follow) => {
   const key = Symbol.for("riptide.flash");
   const state = window[key];
   if (!state) return null;
-  state.overlay.remove();
+  state.overlay?.remove();
   delete window[key];
   const i = state.labels.indexOf(label);
   if (i < 0) return null;
@@ -95,10 +101,44 @@ end
 
 local CLEAR_JS = [[(() => {
   const key = Symbol.for("riptide.flash");
-  window[key]?.overlay.remove();
+  window[key]?.overlay?.remove();
   delete window[key];
   return true;
 })()]]
+
+-- Every frame of the page, the main one first: `fn(list)` with each frame's
+-- `{ frame, value }`. A riptide without frame = "all" answers for the main
+-- frame alone, which this turns into a list of one.
+local function in_every_frame(code, fn)
+  rt.page.eval(code, function(result, err)
+    if err then return fn(nil, err) end
+    if type(result) == "table" and type(result[1]) == "table" and result[1].frame then
+      return fn(result)
+    end
+    if type(result) == "table" and #result == 0 and next(result) == nil then return fn({}) end
+    fn({ { value = result } })
+  end, { frame = "all" })
+end
+
+local function clear()
+  in_every_frame(CLEAR_JS, function() end)
+end
+
+-- Labels for `count` places: one letter each while they last, then pairs.
+local function make_labels(count)
+  local chars = {}
+  for ch in LABELS:gmatch(".") do table.insert(chars, ch) end
+  local out = {}
+  for i = 1, count do
+    if count <= #chars then
+      out[i] = chars[i]
+    else
+      local n = i - 1
+      out[i] = chars[(n // #chars) % #chars + 1] .. chars[n % #chars + 1]
+    end
+  end
+  return out
+end
 
 local function close(state)
   if active ~= state then return end
@@ -108,31 +148,52 @@ end
 
 local function act(state, label)
   close(state)
+  local frame = state.owner[label]
   rt.page.eval(call(ACT_JS, label, state.follow), function(result, err)
     if result == "jumped" then
-      rt.enter_mode("caret")
+      rt.enter_mode("caret", { frame = frame })
     elseif result == "no link" then
       rt.notify("flash: there's no link there", "warning")
     elseif not result then
       rt.notify("flash: " .. (err or "that place is gone"), "error")
     end
-  end)
+    clear()
+  end, { frame = frame })
 end
 
 local function search(state)
   state.phase = "waiting"
-  rt.page.eval(call(FIND_JS, state.typed, LABELS), function(labels, err)
-    if active ~= state then return rt.page.eval(CLEAR_JS, function() end) end
-    if not labels then
+  in_every_frame(call(FIND_JS, state.typed), function(frames, err)
+    if active ~= state then return clear() end
+    if not frames then
       close(state)
       return rt.notify("flash: " .. tostring(err), "error")
     end
-    if #labels == 0 then
+    local total = 0
+    for _, f in ipairs(frames) do
+      if type(f.value) == "number" then total = total + f.value end
+    end
+    if total == 0 then
       close(state)
       return rt.notify("flash: " .. state.typed .. " isn't on screen", "warning")
     end
-    if #labels == 1 then return act(state, labels[1]) end
-    state.labels = labels
+    -- Labels go to the frames in order, each its share.
+    local labels = make_labels(total)
+    state.labels, state.owner = labels, {}
+    local next_label = 1
+    for _, f in ipairs(frames) do
+      local count = type(f.value) == "number" and f.value or 0
+      if count > 0 then
+        local mine = {}
+        for i = next_label, next_label + count - 1 do
+          table.insert(mine, labels[i])
+          state.owner[labels[i]] = f.frame
+        end
+        next_label = next_label + count
+        rt.page.eval(call(DRAW_JS, mine), function() end, { frame = f.frame })
+      end
+    end
+    if total == 1 then return act(state, labels[1]) end
     state.phase = "label"
     state.float:update({ lines = { { { "flash ", "muted" }, { state.typed, "match" }, { "  label?", "muted" } } } })
   end)
@@ -153,7 +214,7 @@ local function press(state, ch)
     end
     if not prefix then
       close(state)
-      rt.page.eval(CLEAR_JS, function() end)
+      clear()
     end
   end
 end
@@ -177,7 +238,7 @@ function M.start(follow)
     on_close = function()
       if active == state then
         active = nil
-        rt.page.eval(CLEAR_JS, function() end)
+        clear()
       end
     end,
   })

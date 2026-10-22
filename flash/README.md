@@ -20,6 +20,6 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "flash", 
 } })
 ```
 
-It reads the text of the main page, open shadow roots included; text inside
-iframes isn't labelled yet. It needs riptide 0.8, and asks to read and
-label the pages you use it on.
+It labels text in the page and in its iframes, such as Gmail's chat, open
+shadow roots included, and starts caret mode in the frame the text is in.
+It needs riptide 0.8, and asks to read and label the pages you use it on.
