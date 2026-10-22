@@ -1,0 +1,18 @@
+name = "flash"
+description = "Jump to any text on the page by typing two of its characters, like flash.nvim"
+# rt.enter_mode, and float keys that work.
+riptide = ">=0.8"
+
+[permissions]
+# Finds the text on the page and labels it.
+pages = ["*"]
+
+[[option]]
+name = "key"
+description = "The key that jumps to text and starts caret mode there"
+default = "<Space>s"
+
+[[option]]
+name = "follow_key"
+description = "The key that jumps to text and follows the link it's in"
+default = "<Space>S"
