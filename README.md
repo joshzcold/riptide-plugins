@@ -22,6 +22,7 @@ them and checks for updates.
 | [keepassxc](keepassxc) | Logins from a KeePassXC database |
 | [reading-list](reading-list) | Save pages to read later |
 | [firenvim](firenvim) | Edit text fields in nvim, drawn over the field |
+| [telescope](telescope) | Fuzzy-find tabs, history, bookmarks and quickmarks |
 
 ## Writing one
 
