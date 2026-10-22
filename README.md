@@ -24,6 +24,7 @@ them and checks for updates.
 | [firenvim](firenvim) | Edit text fields in nvim, drawn over the field |
 | [telescope](telescope) | Fuzzy-find tabs, history, bookmarks and quickmarks |
 | [harpoon](harpoon) | Mark a few pages and jump straight to them |
+| [oil](oil) | Edit your tabs, bookmarks and quickmarks as text in nvim |
 
 ## Writing one
 

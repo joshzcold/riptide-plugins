@@ -329,6 +329,7 @@ addEventListener("rtmessage", (e) => {
   const { name, data } = e.detail;
   if (name === "start") connect(data, Date.now() + 5000, ++starts);
   if (name === "input" && attached) call("nvim_input", [data.keys]);
+  if (name === "set_text" && attached) call("nvim_exec_lua", ["RtFirenvim.set(...)", [data.text]]);
 });
 
 send("ready");

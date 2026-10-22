@@ -1,0 +1,10 @@
+name = "oil"
+description = "Edit your tabs, bookmarks and quickmarks as text in nvim, like oil.nvim"
+# rt.close_tab, rt.move_tab, rt.set_bookmarks and rt.set_quickmarks.
+riptide = ">=0.8"
+# nvim in a float, from the firenvim plugin, which riptide adds for it.
+dependencies = ["firenvim"]
+
+[permissions]
+# Reads and changes your bookmarks and quickmarks.
+history = true

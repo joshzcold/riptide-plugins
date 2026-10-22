@@ -211,6 +211,7 @@ function RtFirenvim.start(text, name, line, col, channel, filetype)
   vim.cmd("edit " .. vim.fn.fnameescape(file))
   pcall(vim.api.nvim_win_set_cursor, 0, { line, col })
   local buf = vim.api.nvim_get_current_buf()
+  RtFirenvim.buf = buf
   -- The filetype nvim found itself; changing it tells the page, so the
   -- plugin keeps the new one for the field (or forgets it, back at this).
   local detected = vim.bo[buf].filetype
@@ -231,6 +232,11 @@ function RtFirenvim.start(text, name, line, col, channel, filetype)
       vim.rpcnotify(channel, "rt_firenvim_write", table.concat(lines, "\n"), sent)
     end,
   })
+  -- Writing went through and changed the text, e.g. oil's applied edits.
+  function RtFirenvim.set(new)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(new, "\n", { plain = true }))
+    vim.bo[buf].modified = false
+  end
   vim.api.nvim_create_autocmd("VimLeavePre", {
     callback = function()
       -- :wq quits right after writing; let the page get the text first.
