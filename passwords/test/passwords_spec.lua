@@ -90,4 +90,16 @@ describe("passwords", function()
     wait(2500)
     assert.equals("", field("pass"))
   end)
+  it("health names the password managers it fills from", function()
+    local lines, report = {}, {}
+    for _, level in ipairs({ "ok", "warn", "error" }) do
+      report[level] = function(text) table.insert(lines, level .. " " .. text) end
+    end
+    passwords().register("one", fake({}))
+    passwords().health(report)
+    passwords().register("one", nil)
+    passwords().health(report)
+    assert.equals("ok Fills from one", lines[1])
+    assert.matches("^warn No password manager is set up", lines[2])
+  end)
 end)

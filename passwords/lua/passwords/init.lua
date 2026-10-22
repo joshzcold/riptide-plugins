@@ -87,6 +87,14 @@ local function fill(what)
   end)
 end
 
+function M.health(report)
+  if #order == 0 then
+    report.warn("No password manager is set up: add pass, rbw, bitwarden or keepassxc too")
+  else
+    report.ok("Fills from " .. table.concat(order, ", "))
+  end
+end
+
 -- Commands and keys; again with other opts replaces the keys.
 function M.setup(user_opts)
   opts = user_opts or {}

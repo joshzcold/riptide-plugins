@@ -117,4 +117,16 @@ function M.run(spawn, argv, opts, done, failed)
   end)
 end
 
+-- For a backend's health: whether its tool `cmd` is there, with `which`, the
+-- calling plugin's own rt.which, and what to do if not. Returns where it is.
+function M.tool_health(which, report, cmd, name)
+  local found = which(cmd)
+  if found then
+    report.ok(cmd .. " found: " .. found)
+  else
+    report.error(cmd .. " isn't installed or isn't on your PATH; install " .. name .. " or set the command option")
+  end
+  return found
+end
+
 return M

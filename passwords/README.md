@@ -26,3 +26,7 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "password
 It checks every login against the site itself, so a password manager plugin
 can't put a lookalike site's login in the picker, and it fills nothing if the
 tab moves to another site meanwhile. The [passwords guide](https://joshzcold.github.io/riptide/guide/passwords.html) has the rest.
+
+If a fill does nothing, `:pack-health` (or **Check health** on the Plugins
+tab) says whether each password manager's program is installed, and for pass
+whether gpg is, and warns when none is set up.

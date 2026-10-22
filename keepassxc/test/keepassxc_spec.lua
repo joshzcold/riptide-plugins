@@ -31,4 +31,19 @@ describe("keepassxc", function()
     wait_field("pass", "pw-carl")
     assert.equals("carl", field("user"))
   end)
+  it("health finds its tool, or says how to get it", function()
+    local function health()
+      local lines, report = {}, {}
+      for _, level in ipairs({ "ok", "warn", "error" }) do
+        report[level] = function(text) table.insert(lines, level .. " " .. text) end
+      end
+      require("keepassxc").health(report)
+      return lines
+    end
+    assert.matches("^ok .*fake%-keepassxc%-cli found", health()[1])
+    require("keepassxc").setup({ command = "/nonexistent/fake-keepassxc-cli", database = "~/x.kdbx" })
+    assert.matches("^error /nonexistent/.* isn't installed or isn't on your PATH", health()[1])
+    -- Back to the test tool for anything after this.
+    require("keepassxc").setup({ command = plugin_test.dir .. "/test/bin/fake-keepassxc-cli", database = "~/x.kdbx" })
+  end)
 end)

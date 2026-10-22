@@ -38,9 +38,15 @@ case $d in "~/"*) d="$HOME/${d#\~/}" ;; esac
 cd "$d" && find -L . -name '*.gpg' -print
 ]]
 
+local config = {}
+
+local function command(opts)
+  return opts.command or (opts.gopass == true and "gopass" or "pass")
+end
+
 function M.new(opts)
   local gopass = opts.gopass == true
-  local cmd = opts.command or (gopass and "gopass" or "pass")
+  local cmd = command(opts)
   local backend = {}
 
   function backend.find(host, cb)
@@ -79,7 +85,17 @@ end
 
 -- Registers with the passwords plugin; rt.pack.add's opts set it up again.
 function M.setup(opts)
-  passwords.register("pass", M.new(opts or {}))
+  config = opts or {}
+  passwords.register("pass", M.new(config))
+end
+
+function M.health(report)
+  local name = config.gopass == true and "gopass" or "pass"
+  site.tool_health(rt.which, report, command(config), name)
+  -- pass decrypts each entry with gpg; gopass may use age instead.
+  if config.gopass ~= true and not rt.which("gpg") then
+    report.error("gpg isn't installed or isn't on your PATH; pass needs it to decrypt your entries")
+  end
 end
 
 return M

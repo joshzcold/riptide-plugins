@@ -51,4 +51,19 @@ describe("bitwarden", function()
     keys("correct<Return>")
     wait_field("pass", "pw-bea")
   end)
+  it("health finds its tool, or says how to get it", function()
+    local function health()
+      local lines, report = {}, {}
+      for _, level in ipairs({ "ok", "warn", "error" }) do
+        report[level] = function(text) table.insert(lines, level .. " " .. text) end
+      end
+      require("bitwarden").health(report)
+      return lines
+    end
+    assert.matches("^ok .*fake%-bw found", health()[1])
+    require("bitwarden").setup({ command = "/nonexistent/fake-bw" })
+    assert.matches("^error /nonexistent/.* isn't installed or isn't on your PATH", health()[1])
+    -- Back to the test tool for anything after this.
+    require("bitwarden").setup({ command = plugin_test.dir .. "/test/bin/fake-bw" })
+  end)
 end)
