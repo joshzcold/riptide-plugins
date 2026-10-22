@@ -84,6 +84,49 @@ describe("firenvim", function()
     firenvim().setup({ command = plugin_test.dir .. "/test/bin/nvim-clean" })
   end)
 
+  it("leaves a field or a site alone once told to, from the float's close button", function()
+    firenvim().setup({ auto = "textarea", command = plugin_test.dir .. "/test/bin/nvim-clean" })
+    rt.set("input.insert_mode.auto_load", true)
+    local function focus_notes()
+      open_notes()
+      js("document.getElementById('notes').focus()")
+    end
+    run("open " .. page("textarea.html"))
+    wait_for("load_finished", { pattern = "plugin-test.localhost" })
+    run("firenvim-forget")
+
+    -- Its close button, then 1: never on this field. The next visit doesn't open.
+    focus_notes()
+    attached().dismiss()
+    wait(300)
+    keys("1")
+    focus_notes()
+    wait(1500)
+    assert.equals(nil, firenvim().session(), "left alone")
+
+    -- Forgotten, it opens again; 3: just this time, so it opens next time too.
+    run("firenvim-forget")
+    focus_notes()
+    attached().dismiss()
+    wait(300)
+    keys("3")
+    focus_notes()
+    attached().input(":q<CR>")
+    wait_until(function() return firenvim().session() == nil end)
+
+    -- 2: never on this site.
+    focus_notes()
+    attached().dismiss()
+    wait(300)
+    keys("2")
+    focus_notes()
+    wait(1500)
+    assert.equals(nil, firenvim().session(), "the site is left alone")
+
+    run("firenvim-forget")
+    firenvim().setup({ command = plugin_test.dir .. "/test/bin/nvim-clean" })
+  end)
+
   it("says so when no text field has the focus", function()
     open_notes()
     clear_messages()
