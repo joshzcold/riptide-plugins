@@ -23,6 +23,7 @@ them and checks for updates.
 | [reading-list](reading-list) | Save pages to read later |
 | [firenvim](firenvim) | Edit text fields in nvim, drawn over the field |
 | [telescope](telescope) | Fuzzy-find tabs, history, bookmarks and quickmarks |
+| [harpoon](harpoon) | Mark a few pages and jump straight to them |
 
 ## Writing one
 

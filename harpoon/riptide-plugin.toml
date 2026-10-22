@@ -1,0 +1,17 @@
+name = "harpoon"
+description = "Mark a handful of pages and jump straight to them, like harpoon"
+riptide = ">=0.5"
+
+[permissions]
+
+[[option]]
+name = "slots"
+type = "number"
+default = 4
+description = "How many marks <Space>1, <Space>2… jump to (up to 9)"
+
+[[option]]
+name = "keys"
+type = "bool"
+default = true
+description = "Bind <Space>a (mark this page), <Space>h (the list) and <Space>1… (jump)"
