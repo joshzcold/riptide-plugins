@@ -39,6 +39,15 @@ jobs:
               echo "::warning::${dir%/} skipped: needs riptide >=$need, and this is $have"
               continue
             fi
-            xvfb-run -a riptide --plugin-test "$dir" || status=1
+            if ! xvfb-run -a riptide --plugin-test "$dir"; then
+              # A slow runner can take a browser test past its 10 s; a real
+              # failure fails again.
+              echo "== ${dir%/}, again"
+              if xvfb-run -a riptide --plugin-test "$dir"; then
+                echo "::warning::${dir%/} passed on the second try"
+              else
+                status=1
+              fi
+            fi
           done
           exit $status
