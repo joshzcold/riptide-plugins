@@ -15,7 +15,9 @@ local bound = {}
 local hooked = false
 -- Fields auto mode leaves alone: rules[host][field] = "never", and
 -- rules[host]["*"] = "never" for the whole site. filetypes[host][field] is
--- the filetype last set in nvim for the field, when it isn't nvim's own.
+-- the filetype last set in nvim for the field, when it isn't nvim's own, and
+-- places[host][field] where it was dragged to from the field, { x, y }, and
+-- sizes[host][field] the size its grip left it at, { width, height }.
 local store = rt.store("firenvim")
 
 local function hex(bytes)
@@ -113,6 +115,29 @@ local function keep_filetype(field, filetype)
   store.set("filetypes", all)
 end
 
+local function place_of(field)
+  return ((store.get("places") or {})[field.host] or {})[field.field]
+end
+
+local function keep_place(field, x, y)
+  local all = store.get("places") or {}
+  all[field.host] = all[field.host] or {}
+  all[field.host][field.field] = (x ~= 0 or y ~= 0) and { x = x, y = y } or nil
+  if next(all[field.host]) == nil then all[field.host] = nil end
+  store.set("places", all)
+end
+
+local function size_of(field)
+  return ((store.get("sizes") or {})[field.host] or {})[field.field]
+end
+
+local function keep_size(field, width, height)
+  local all = store.get("sizes") or {}
+  all[field.host] = all[field.host] or {}
+  all[field.host][field.field] = { width = width, height = height }
+  store.set("sizes", all)
+end
+
 local function remember(host, field, choice)
   local rules = store.get("rules") or {}
   rules[host] = rules[host] or {}
@@ -205,12 +230,22 @@ local function start(field, token, auto)
     where = "float",
     title = "nvim",
     over = cover(field),
+    offset = place_of(field),
     keys = "all",
+    -- Dragged somewhere else: it opens there, next to this field, next time.
+    on_move = function(x, y) keep_place(field, x, y) end,
     on_message = function(name, data, page)
       if session ~= s then return end
       if name == "ready" then
         s.ready = true
+        local size = size_of(field)
+        -- page:resize is newer than riptide 0.5.0.
+        if size and page.resize then page:resize(size.width, size.height) end
         page:send("start", s.start())
+      elseif name == "resize" then
+        if page.resize then page:resize(data.width, data.height) end
+      elseif name == "resized" then
+        keep_size(field, data.width, data.height)
       elseif name == "attached" then
         s.attached = true
       elseif name == "write" then
@@ -283,13 +318,17 @@ local function forget()
   local host = rt.url():match("^%a[%w+.-]*://([^/?#:]+)")
   local rules = store.get("rules") or {}
   local filetypes = store.get("filetypes") or {}
-  if not host or not (rules[host] or filetypes[host]) then
+  local places = store.get("places") or {}
+  local sizes = store.get("sizes") or {}
+  if not host or not (rules[host] or filetypes[host] or places[host] or sizes[host]) then
     return rt.notify("firenvim: nothing remembered for " .. (host or "this page"))
   end
-  rules[host], filetypes[host] = nil, nil
+  rules[host], filetypes[host], places[host], sizes[host] = nil, nil, nil, nil
   store.set("rules", rules)
   store.set("filetypes", filetypes)
-  rt.notify("firenvim: forgot the choices and filetypes for " .. host)
+  store.set("places", places)
+  store.set("sizes", sizes)
+  rt.notify("firenvim: forgot the choices, filetypes, places and sizes for " .. host)
 end
 
 -- The open editor, for tests: whether nvim is attached, and keys for it.
@@ -305,7 +344,7 @@ end
 function M.setup(user_opts)
   opts = user_opts or {}
   rt.command("firenvim", function() M.open(false) end, "Edit the focused text field in nvim, over the field")
-  rt.command("firenvim-forget", forget, "Forget which fields auto mode leaves alone on this site, and their filetypes")
+  rt.command("firenvim-forget", forget, "Forget which fields auto mode leaves alone on this site, their filetypes, and where nvim was dragged and resized to")
 
   for _, b in ipairs(bound) do rt.keymap.del(b[1], b[2]) end
   bound = {}
