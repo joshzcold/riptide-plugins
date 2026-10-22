@@ -408,6 +408,8 @@ function M.session()
     attached = s.attached == true,
     input = function(keys) if session == s then s.page:send("input", { keys = keys }) end end,
     dismiss = s.dismiss,
+    -- Close its float, whether or not nvim ever attached; nvim then quits.
+    close = function() finish(s) end,
   }
 end
 
