@@ -278,8 +278,13 @@ function connect(start, deadline, mine) {
   };
 }
 
+const dismiss = document.getElementById("dismiss");
+dismiss.addEventListener("mousedown", (e) => e.stopPropagation());
+dismiss.addEventListener("click", () => send("dismiss"));
+
 async function attach(start) {
   font = start.font || font;
+  dismiss.hidden = !start.dismiss;
   measure();
   resizeCanvas();
   blankGrid(cols, rows);

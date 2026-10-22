@@ -13,6 +13,9 @@ local opts = {}
 local session
 local bound = {}
 local hooked = false
+-- Fields auto mode leaves alone: rules[host][field] = "never", and
+-- rules[host]["*"] = "never" for the whole site.
+local store = rt.store("firenvim")
 
 local function hex(bytes)
   local out = {}
@@ -48,6 +51,10 @@ local function field_js(token, auto)
     rect: { x: r.left, y: r.top, width: r.width, height: r.height },
     viewport: { width: innerWidth, height: innerHeight },
     name: location.hostname + "_" + (el.id || el.name || el.tagName.toLowerCase()),
+    host: location.hostname,
+    // The same field on every page of the site, e.g. each issue's comment box.
+    field: kind + ":" + (el.name || el.getAttribute("aria-label") || el.placeholder || el.id || el.tagName.toLowerCase()),
+    label: el.getAttribute("aria-label") || el.placeholder || el.name || el.id || "",
   };
 })()]], rt.json.encode(token), rt.json.encode(auto or false), ELEMENTS)
 end
@@ -79,6 +86,27 @@ local function refocus_js(token)
 })()]], ELEMENTS, rt.json.encode(token), rt.json.encode(token))
 end
 
+-- Auto mode leaves the field alone until the page loads again.
+local function skip_js(token)
+  return string.format([[(() => {
+  const els = %s, el = els.get(%s);
+  els.delete(%s);
+  if (el) el.dataset.rtFirenvimDone = "1";
+})()]], ELEMENTS, rt.json.encode(token), rt.json.encode(token))
+end
+
+local function rule(field)
+  local site = (store.get("rules") or {})[field.host] or {}
+  return site["*"] or site[field.field]
+end
+
+local function remember(host, field, choice)
+  local rules = store.get("rules") or {}
+  rules[host] = rules[host] or {}
+  rules[host][field] = choice
+  store.set("rules", rules)
+end
+
 -- A file name nvim can use, so filetype autocmds can match on the site.
 local function file_name(name)
   return (name:gsub("[^%w._-]", "_"):sub(1, 80)) .. "." .. (opts.extension or "txt")
@@ -101,7 +129,9 @@ local function finish(s)
   rt.page.eval(refocus_js(s.token), function() end)
 end
 
-local function start(field, token)
+local ask_to_ignore
+
+local function start(field, token, auto)
   local s = { token = token, attempts = 0 }
   session = s
 
@@ -136,6 +166,11 @@ local function start(field, token)
     end)
   end
 
+  function s.dismiss()
+    finish(s)
+    ask_to_ignore(field)
+  end
+
   function s.start()
     return {
       port = s.port,
@@ -145,6 +180,8 @@ local function start(field, token)
       col = field.col,
       name = file_name(field.name),
       font = opts.font,
+      -- Auto mode opened it, so it offers to leave the field alone next time.
+      dismiss = auto == true,
     }
   end
 
@@ -173,9 +210,38 @@ local function start(field, token)
         finish(s)
       elseif name == "closed" then
         finish(s)
+      elseif name == "dismiss" then
+        s.dismiss()
       end
     end,
   })
+end
+
+local CHOICES = {
+  { label = "Never on this field" },
+  { label = "Never on this site", site = true },
+  { label = "Just this time" },
+}
+
+-- Its ✕ closed nvim, which auto mode opened: leave the field alone from now on?
+function ask_to_ignore(field)
+  local what = field.label ~= "" and (" (" .. field.label .. ")") or ""
+  rt.ui.select(CHOICES, {
+    prompt = "Open nvim by itself on this field again? " .. field.host .. what,
+    format = function(choice) return choice.label end,
+  }, function(choice)
+    if choice and choice.label ~= "Just this time" then
+      remember(field.host, choice.site and "*" or field.field, "never")
+    end
+  end)
+end
+
+-- Auto mode on a field, unless it was told to leave it alone.
+local function auto_open(field, token)
+  if rule(field) == "never" then
+    return rt.page.eval(skip_js(token), function() end)
+  end
+  start(field, token, true)
 end
 
 -- Edit the focused field in nvim. `auto` is set when focusing it did this.
@@ -190,8 +256,21 @@ function M.open(auto)
       end
       return
     end
+    if auto then return auto_open(field, token) end
     start(field, token)
   end)
+end
+
+-- Forget what auto mode was told for the current site.
+local function forget()
+  local host = rt.url():match("^%a[%w+.-]*://([^/?#:]+)")
+  local rules = store.get("rules") or {}
+  if not host or not rules[host] then
+    return rt.notify("firenvim: nothing remembered for " .. (host or "this page"))
+  end
+  rules[host] = nil
+  store.set("rules", rules)
+  rt.notify("firenvim: forgot the choices for " .. host .. "; auto mode asks again")
 end
 
 -- The open editor, for tests: whether nvim is attached, and keys for it.
@@ -200,12 +279,14 @@ function M.session()
   return {
     attached = session.attached == true,
     input = function(keys) session.page:send("input", { keys = keys }) end,
+    dismiss = session.dismiss,
   }
 end
 
 function M.setup(user_opts)
   opts = user_opts or {}
   rt.command("firenvim", function() M.open(false) end, "Edit the focused text field in nvim, over the field")
+  rt.command("firenvim-forget", forget, "Forget which fields auto mode opens on this site, or leaves alone")
 
   for _, b in ipairs(bound) do rt.keymap.del(b[1], b[2]) end
   bound = {}

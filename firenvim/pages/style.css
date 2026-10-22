@@ -10,3 +10,22 @@ canvas {
   display: block;
   outline: none;
 }
+
+#dismiss {
+  position: fixed;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  font: 12px sans-serif;
+  color: #ddd;
+  background: rgba(80, 80, 80, 0.6);
+  cursor: pointer;
+}
+
+#dismiss:hover {
+  background: rgba(200, 60, 60, 0.9);
+}

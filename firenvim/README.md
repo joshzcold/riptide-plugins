@@ -32,10 +32,17 @@ vim.api.nvim_create_autocmd("BufEnter", {
 if vim.g.started_by_riptide then vim.o.laststatus = 0 end
 ```
 
-`auto` opens nvim when you focus a field and riptide enters insert mode. It
-leaves a field alone once you've closed nvim on it, and moving straight from
-one field to another doesn't open it, since riptide is already in insert
-mode; press the key there.
+`auto` opens nvim when you focus a field and riptide enters insert mode.
+When it does, nvim has a small ✕ in its top right corner: it closes nvim
+without writing and asks whether to open by itself on that field again, with
+**Never on this field**, **Never on this site** or **Just this time**. A
+field counts as the same one on every page of the site, such as each issue's
+comment box. `:firenvim-forget` forgets the current site's answers, and
+`<Ctrl-Shift-e>` opens nvim on any field all the same.
+
+Auto mode also leaves a field alone once you've closed nvim on it, until the
+page loads again. Moving straight from one field to another doesn't open it,
+since riptide is already in insert mode; press the key there.
 
 ## How it works
 
