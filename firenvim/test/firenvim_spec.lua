@@ -21,11 +21,12 @@ local function open_notes()
   wait_for("load_finished", { pattern = "plugin-test.localhost" })
 end
 
+-- The first nvim on a fresh machine can take a while to start.
 local function attached()
   wait_until(function()
     local s = firenvim().session()
     return s and s.attached
-  end, 6000)
+  end, 15000)
   return firenvim().session()
 end
 

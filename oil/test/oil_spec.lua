@@ -11,7 +11,7 @@ local function editing()
   wait_until(function()
     local s = oil().editing()
     return s and s.attached
-  end, 6000)
+  end, 15000)
   return oil().editing()
 end
 
