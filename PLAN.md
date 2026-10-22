@@ -1,37 +1,15 @@
 # Plan: more Vim and Neovim favourites as riptide plugins
 
-[firenvim](firenvim), [telescope](telescope), [harpoon](harpoon), [oil](oil)
-and [flash](flash) are done. These are next, in order. Each entry says what it is, how it would work in riptide, and what
-riptide would need that plugins can't do today.
+[firenvim](firenvim), [telescope](telescope), [harpoon](harpoon), [oil](oil),
+[flash](flash) and [reader](reader) are done. What's left is follow-ups to
+them.
 
-## 1. search and translate the selection
+## Reader follow-ups
 
-Like [Surfingkeys](https://github.com/brookhong/Surfingkeys)' selection
-search.
-
-- In caret or visual mode, `gs` searches the selected text with a search
-  engine picked from `url.searchengines`, and `gT` shows a translation in a
-  float.
-- **Riptide:** nothing new for search: `rt.page.selection` and `rt.open`.
-  Reading `url.searchengines` needs the `settings` permission, or an option
-  listing the engines. Translation needs a service: the `network`
-  permission for its host, and fetching from Lua (riptide has no HTTP call
-  for plugins yet), or `rt.spawn` of a command such as `trans`.
-- **Size:** small for search; translation depends on the service.
-
-## 2. reader mode
-
-Like [zen-mode.nvim](https://github.com/folke/zen-mode.nvim) for pages: the
-article alone, in clean type.
-
-- `:reader` extracts the article with
-  [Readability.js](https://github.com/mozilla/readability) and shows it in a
-  plugin page, in a tab or a side panel, with the original's links.
-- **Riptide:** the page's HTML is read with `rt.page.eval`
-  (`document.documentElement.outerHTML`); Readability runs in the plugin's
-  page, which ships it as a file. Images from other sites would need
-  `img-src` for them in the page's CSP, which plugin pages don't have.
-- **Size:** small to medium.
+- **Images:** plugin pages may only show their own images (`img-src 'self'
+  data:`), so reader view shows each image's description instead. Showing
+  them needs riptide to let a plugin page load images from the article's
+  site, e.g. an `images` permission.
 
 ## Telescope follow-ups
 

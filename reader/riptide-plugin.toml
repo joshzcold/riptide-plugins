@@ -1,0 +1,12 @@
+name = "reader"
+description = "Read the article on a page alone, cleanly typeset, like reader view"
+riptide = ">=0.4"
+
+[permissions]
+# Reads the article out of the page you're on.
+pages = ["*"]
+
+[[option]]
+name = "key"
+description = "The key that opens the article in reader view"
+default = "gR"

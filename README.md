@@ -26,6 +26,7 @@ them and checks for updates.
 | [harpoon](harpoon) | Mark a few pages and jump straight to them |
 | [oil](oil) | Edit your tabs, bookmarks and quickmarks as text in nvim |
 | [flash](flash) | Jump to any text on screen by two of its characters |
+| [reader](reader) | Read a page's article alone, cleanly typeset |
 
 ## Writing one
 

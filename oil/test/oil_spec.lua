@@ -33,7 +33,7 @@ describe("oil", function()
   before_each(function()
     local left = require("firenvim").session()
     if left then
-      left.input("<Esc>:qa!<CR>")
+      left.close()
       wait_until(function() return require("firenvim").session() == nil end, 4000)
     end
   end)
