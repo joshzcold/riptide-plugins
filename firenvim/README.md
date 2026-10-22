@@ -20,6 +20,12 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "firenvim
 } })
 ```
 
+nvim follows its field as the page scrolls. Drag nvim's bar to move it, or
+the grip in its bottom right corner to resize it; the plugin keeps the place
+(next to the field) and the size for that field on that site, and opens nvim
+the same way next time. Following, moving and resizing need riptide 0.6;
+on 0.5 nvim stays where it opened, at the field's size.
+
 Set a filetype in nvim, such as `:set ft=markdown`, and the plugin keeps it
 for that field on that site: the next time nvim opens there, it starts in it.
 Setting it back to the one nvim picked forgets it, and so does

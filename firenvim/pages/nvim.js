@@ -280,6 +280,30 @@ function connect(start, deadline, mine) {
   };
 }
 
+// Dragging the grip resizes the float; the plugin keeps the size it ends at.
+const grip = document.getElementById("grip");
+let resizing = null;
+grip.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  grip.setPointerCapture(e.pointerId);
+  resizing = { x: e.clientX, y: e.clientY, width: innerWidth, height: innerHeight, frame: 0 };
+});
+grip.addEventListener("pointermove", (e) => {
+  if (!resizing || resizing.frame) return;
+  resizing.frame = requestAnimationFrame(() => {
+    resizing.frame = 0;
+    send("resize", {
+      width: Math.round(resizing.width + e.clientX - resizing.x),
+      height: Math.round(resizing.height + e.clientY - resizing.y),
+    });
+  });
+});
+grip.addEventListener("pointerup", () => {
+  resizing = null;
+  setTimeout(() => send("resized", { width: innerWidth, height: innerHeight }), 100);
+});
+
 const dismiss = document.getElementById("dismiss");
 dismiss.addEventListener("mousedown", (e) => e.stopPropagation());
 dismiss.addEventListener("click", () => send("dismiss"));

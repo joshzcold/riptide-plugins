@@ -28,3 +28,13 @@ canvas {
 #dismiss:hover {
   background: rgba(200, 60, 60, 0.9);
 }
+
+#grip {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(160, 160, 160, 0.7) 50%);
+}
