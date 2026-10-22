@@ -11,7 +11,7 @@ local function editing()
   wait_until(function()
     local s = oil().editing()
     return s and s.attached
-  end, 15000)
+  end, 8000)
   return oil().editing()
 end
 
@@ -28,6 +28,16 @@ local function titles()
 end
 
 describe("oil", function()
+  -- A test that ran out of time can leave its nvim open, which the next
+  -- would type into.
+  before_each(function()
+    local left = require("firenvim").session()
+    if left then
+      left.input("<Esc>:qa!<CR>")
+      wait_until(function() return require("firenvim").session() == nil end, 4000)
+    end
+  end)
+
   it("closes, reorders and opens tabs from the edited list", function()
     visit("alpha.html")
     visit("beta.html", "-t")

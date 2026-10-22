@@ -21,16 +21,25 @@ local function open_notes()
   wait_for("load_finished", { pattern = "plugin-test.localhost" })
 end
 
--- The first nvim on a fresh machine can take a while to start.
 local function attached()
   wait_until(function()
     local s = firenvim().session()
     return s and s.attached
-  end, 15000)
+  end, 8000)
   return firenvim().session()
 end
 
 describe("firenvim", function()
+  -- A test that ran out of time can leave its nvim open, which the next
+  -- would type into.
+  before_each(function()
+    local left = firenvim().session()
+    if left then
+      left.input("<Esc>:qa!<CR>")
+      wait_until(function() return firenvim().session() == nil end, 4000)
+    end
+  end)
+
   it("edits the focused text area in nvim and puts it back on :w", function()
     open_notes()
     js("document.getElementById('notes').focus()")
