@@ -107,15 +107,21 @@ local CLEAR_JS = [[(() => {
 })()]]
 
 -- Every frame of the page, the main one first: `fn(list)` with each frame's
--- `{ frame, value }`. A riptide without frame = "all" answers for the main
--- frame alone, which this turns into a list of one.
+-- `{ frame, value }`. A riptide without frame = "all" (before riptide#67)
+-- refuses it, or runs it in the main frame; either way this falls back to
+-- the main frame alone, as a list of one.
 local function in_every_frame(code, fn)
+  local function main_only()
+    rt.page.eval(code, function(result, err)
+      if err then return fn(nil, err) end
+      fn({ { value = result } })
+    end)
+  end
   rt.page.eval(code, function(result, err)
-    if err then return fn(nil, err) end
-    if type(result) == "table" and type(result[1]) == "table" and result[1].frame then
+    if err then return main_only() end
+    if type(result) == "table" and (next(result) == nil or (type(result[1]) == "table" and result[1].frame)) then
       return fn(result)
     end
-    if type(result) == "table" and #result == 0 and next(result) == nil then return fn({}) end
     fn({ { value = result } })
   end, { frame = "all" })
 end

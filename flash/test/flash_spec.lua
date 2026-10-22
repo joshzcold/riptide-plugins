@@ -39,6 +39,12 @@ describe("flash", function()
   end)
 
   it("jumps into text inside an iframe, and starts caret mode there", function()
+    -- A riptide without frame = "all" (riptide#67) searches the main frame only.
+    local all, done
+    rt.page.eval("1", function(v) all, done = type(v) == "table", true end, { frame = "all" })
+    wait_until(function() return done end)
+    if not all then return end
+
     run("open " .. page("framed.html"))
     wait_for("load_finished", { pattern = "plugin-test.localhost" })
     local inner = "document.querySelector('iframe').contentDocument"
