@@ -200,9 +200,10 @@ end
 waiting:start(20000, 0, quit)
 
 -- The page calls this once attached: edit `text` in a file named `name`,
--- and send the text back over `channel` on every write.
+-- in `filetype` if one was kept for the field, and send the text back over
+-- `channel` on every write.
 _G.RtFirenvim = {}
-function RtFirenvim.start(text, name, line, col, channel)
+function RtFirenvim.start(text, name, line, col, channel, filetype)
   local dir = vim.fn.tempname()
   vim.fn.mkdir(dir, "p")
   local file = dir .. "/" .. name
@@ -210,6 +211,16 @@ function RtFirenvim.start(text, name, line, col, channel)
   vim.cmd("edit " .. vim.fn.fnameescape(file))
   pcall(vim.api.nvim_win_set_cursor, 0, { line, col })
   local buf = vim.api.nvim_get_current_buf()
+  -- The filetype nvim found itself; changing it tells the page, so the
+  -- plugin keeps the new one for the field (or forgets it, back at this).
+  local detected = vim.bo[buf].filetype
+  if filetype and filetype ~= "" then vim.bo[buf].filetype = filetype end
+  vim.api.nvim_create_autocmd("FileType", {
+    buffer = buf,
+    callback = function(args)
+      vim.rpcnotify(channel, "rt_firenvim_filetype", args.match, detected)
+    end,
+  })
   -- Writes sent, and the last one the page has (it sets g:rt_firenvim_got).
   local sent = 0
   vim.api.nvim_create_autocmd("BufWritePost", {

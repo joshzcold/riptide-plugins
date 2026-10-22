@@ -20,7 +20,12 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "firenvim
 } })
 ```
 
-The file is named after the site and the field, e.g. `github.com_comment.md`,
+Set a filetype in nvim, such as `:set ft=markdown`, and the plugin keeps it
+for that field on that site: the next time nvim opens there, it starts in it.
+Setting it back to the one nvim picked forgets it, and so does
+`:firenvim-forget`, along with the site's ignore choices.
+
+The file is also named after the site and the field, e.g. `github.com_comment.md`,
 so your config can match it, and `vim.g.started_by_riptide` is set:
 
 ```lua

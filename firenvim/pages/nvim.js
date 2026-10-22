@@ -177,6 +177,8 @@ function onMessage([type, ...rest]) {
         const handle = redraw[name];
         if (handle) for (const args of batches) handle(args);
       }
+    } else if (method === "rt_firenvim_filetype") {
+      send("filetype", { filetype: params[0], detected: params[1] });
     } else if (method === "rt_firenvim_write") {
       send("write", { text: params[0] });
       call("nvim_set_var", ["rt_firenvim_got", params[1]]);
@@ -292,7 +294,7 @@ async function attach(start) {
   await call("nvim_ui_attach", [cols, rows, { ext_linegrid: true, rgb: true }]);
   await call("nvim_exec_lua", [
     "RtFirenvim.start(...)",
-    [start.text, start.name, start.line, start.col, channel],
+    [start.text, start.name, start.line, start.col, channel, start.filetype ?? ""],
   ]);
   attached = true;
   canvas.focus();
