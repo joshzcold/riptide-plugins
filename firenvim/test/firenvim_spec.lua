@@ -84,7 +84,7 @@ describe("firenvim", function()
     firenvim().setup({ command = plugin_test.dir .. "/test/bin/nvim-clean" })
   end)
 
-  it("leaves a field or a site alone once told to, from the float's close button", function()
+  it("leaves a field or a site alone once told to, from the float's ignore button", function()
     firenvim().setup({ auto = "textarea", command = plugin_test.dir .. "/test/bin/nvim-clean" })
     rt.set("input.insert_mode.auto_load", true)
     local function focus_notes()

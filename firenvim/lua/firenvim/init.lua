@@ -223,7 +223,7 @@ local CHOICES = {
   { label = "Just this time" },
 }
 
--- Its ✕ closed nvim, which auto mode opened: leave the field alone from now on?
+-- Its ignore button closed nvim, which auto mode opened: leave the field alone from now on?
 function ask_to_ignore(field)
   local what = field.label ~= "" and (" (" .. field.label .. ")") or ""
   rt.ui.select(CHOICES, {
