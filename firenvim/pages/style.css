@@ -15,9 +15,8 @@ canvas {
   position: fixed;
   top: 2px;
   right: 2px;
-  width: 18px;
   height: 18px;
-  padding: 0;
+  padding: 0 6px;
   border: none;
   border-radius: 3px;
   font: 12px sans-serif;
