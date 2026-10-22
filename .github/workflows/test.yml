@@ -26,16 +26,17 @@ jobs:
       - name: Test every plugin with tests
         run: |
           status=0
+          have=$(riptide --version | awk '{print $2}')
           for dir in */; do
             [ -d "$dir/test" ] || continue
             echo "== ${dir%/}"
-            xvfb-run -a riptide --plugin-test "$dir" 2>&1 | tee test.log
-            [ "${PIPESTATUS[0]}" -eq 0 ] && continue
-            # A plugin for the next release waits until the nightly is that version.
-            if grep -q "needs riptide .*; update riptide" test.log; then
-              echo "::warning::${dir%/} skipped: $(grep -o "needs riptide .*" test.log | head -1)"
-            else
-              status=1
+            # A plugin for the next release waits until the nightly is that
+            # version; an older riptide may not even read its manifest.
+            need=$(sed -n 's/^riptide *= *">= *\([0-9.]*\)".*/\1/p' "$dir/riptide-plugin.toml")
+            if [ -n "$need" ] && [ "$(printf '%s\n%s\n' "$need" "$have" | sort -V | head -1)" != "$need" ]; then
+              echo "::warning::${dir%/} skipped: needs riptide >=$need, and this is $have"
+              continue
             fi
+            xvfb-run -a riptide --plugin-test "$dir" || status=1
           done
           exit $status
