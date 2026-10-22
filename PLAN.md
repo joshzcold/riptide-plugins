@@ -1,25 +1,10 @@
 # Plan: more Vim and Neovim favourites as riptide plugins
 
-[firenvim](firenvim) and [telescope](telescope) are done. These are next, in
-order. Each entry says what it is, how it would work in riptide, and what
+[firenvim](firenvim), [telescope](telescope) and [harpoon](harpoon) are
+done. These are next, in order. Each entry says what it is, how it would work in riptide, and what
 riptide would need that plugins can't do today.
 
-## 1. harpoon
-
-Like [harpoon](https://github.com/ThePrimeagen/harpoon): mark a handful of
-pages and jump straight to them.
-
-- `<Space>a` marks the current page; `<Space>1` to `<Space>4` jump to marks
-  1 to 4, switching to the page's tab if it's open and opening it otherwise.
-  `<Space>h` opens a float listing the marks, where `d` removes one and
-  `J`/`K` move it.
-- Marks are kept per riptide profile in `rt.store()`, in order.
-- **Riptide:** nothing new. `rt.tabs()` and `rt.select_tab` (riptide#52)
-  find and switch to an open tab; `rt.open` opens the rest; `rt.ui.float`
-  with `keys` covers the list.
-- **Size:** small. A good first one.
-
-## 2. oil-style editing
+## 1. oil-style editing
 
 Like [oil.nvim](https://github.com/stevearc/oil.nvim): edit lists as text in
 nvim, and `:w` applies the changes.
@@ -42,7 +27,7 @@ nvim, and `:w` applies the changes.
   stable ids would be cleaner.
 - **Size:** medium.
 
-## 3. flash jumping
+## 2. flash jumping
 
 Like [flash.nvim](https://github.com/folke/flash.nvim) and
 [leap.nvim](https://github.com/ggandor/leap.nvim): type a couple of
@@ -62,7 +47,7 @@ type the label to jump there.
   `rt.page.eval` in every frame, like hints, rather than one frame.
 - **Size:** medium.
 
-## 4. search and translate the selection
+## 3. search and translate the selection
 
 Like [Surfingkeys](https://github.com/brookhong/Surfingkeys)' selection
 search.
@@ -77,7 +62,7 @@ search.
   for plugins yet), or `rt.spawn` of a command such as `trans`.
 - **Size:** small for search; translation depends on the service.
 
-## 5. reader mode
+## 4. reader mode
 
 Like [zen-mode.nvim](https://github.com/folke/zen-mode.nvim) for pages: the
 article alone, in clean type.
