@@ -20,5 +20,8 @@ adds with this one; its options (the nvim command, the font) apply here too.
 The file nvim edits is `riptide-tabs.oil` (or `-bookmarks`, `-quickmarks`),
 so your config can give it a filetype.
 
-It needs riptide 0.8, and asks to read and change your bookmarks and
-quickmarks.
+Saving keeps the previous file beside it (`quickmarks.prev`, and `.prev`
+added to the bookmarks file's name), so a bad edit can be undone by hand.
+
+It needs riptide 0.8, and asks to read your bookmarks and quickmarks and to
+change them.
