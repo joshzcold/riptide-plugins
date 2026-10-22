@@ -145,6 +145,24 @@ describe("firenvim", function()
     run("firenvim-forget")
   end)
 
+  it("edits a field inside an iframe", function()
+    -- Older riptides run rt.page.eval in the main frame only, and say no frame.
+    local frame, done
+    rt.page.eval("1", function(_, _, id) frame, done = id, true end, { frame = "focused" })
+    wait_until(function() return done end)
+    if not frame then return end
+
+    run("open " .. page("framed.html"))
+    wait_for("load_finished", { pattern = "plugin-test.localhost" })
+    local inner = "document.querySelector('iframe').contentDocument.getElementById('notes')"
+    wait_until(function() return js(inner .. "?.value") == "in the frame" end)
+    js(inner .. ".focus()")
+    run("firenvim")
+    attached().input("A, edited<Esc>:wq<CR>")
+    wait_until(function() return firenvim().session() == nil end)
+    assert.equals("in the frame, edited", js(inner .. ".value"))
+  end)
+
   it("says so when no text field has the focus", function()
     open_notes()
     clear_messages()
