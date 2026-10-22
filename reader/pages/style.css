@@ -1,0 +1,120 @@
+:root {
+  --bg: #fbf8f1;
+  --fg: #2b2a28;
+  --muted: #7a756c;
+  --link: #2b5d9b;
+  --rule: #e3ddd0;
+  --code: #efe9dc;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d1c1a;
+    --fg: #e6e1d6;
+    --muted: #9a958b;
+    --link: #8ab4e8;
+    --rule: #3a3833;
+    --code: #2a2926;
+  }
+}
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  margin: 0;
+  font: 19px/1.65 Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+}
+
+main {
+  max-width: 38em;
+  margin: 0 auto;
+  padding: 3em 1.25em 6em;
+}
+
+header {
+  margin-bottom: 2em;
+  padding-bottom: 1.25em;
+  border-bottom: 1px solid var(--rule);
+}
+
+#site {
+  margin: 0;
+  font: 14px system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+#site a {
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0.3em 0 0.2em;
+  font-size: 2em;
+  line-height: 1.2;
+}
+
+#meta {
+  margin: 0;
+  color: var(--muted);
+  font: 14px system-ui, sans-serif;
+}
+
+article h1, article h2, article h3, article h4 {
+  line-height: 1.25;
+  margin: 1.6em 0 0.5em;
+}
+
+a {
+  color: var(--link);
+}
+
+blockquote {
+  margin: 1.2em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--rule);
+  color: var(--muted);
+}
+
+pre, code {
+  font: 0.85em ui-monospace, monospace;
+  background: var(--code);
+  border-radius: 4px;
+}
+
+code {
+  padding: 0.1em 0.3em;
+}
+
+pre {
+  padding: 0.8em 1em;
+  overflow-x: auto;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+td, th {
+  border: 1px solid var(--rule);
+  padding: 0.3em 0.6em;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+}
+
+.image, .muted, figcaption {
+  color: var(--muted);
+  font: italic 0.85em system-ui, sans-serif;
+}
