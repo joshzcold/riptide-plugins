@@ -7,7 +7,8 @@ const promptEl = document.getElementById("prompt");
 const countEl = document.getElementById("count");
 const listEl = document.getElementById("list");
 
-const MAX_SHOWN = 200;
+// Rows drawn: the best matches; the count says how many there are in all.
+const MAX_SHOWN = 50;
 const KINDS = { tab: "T", quickmark: "Q", bookmark: "B", history: "H" };
 const RANK = { tab: 0, quickmark: 1, bookmark: 2, history: 3 };
 
@@ -16,6 +17,8 @@ let withHistory = false;
 let query = "";
 let cursor = 0;
 let shown = [];
+// The last query and every item it matched: a longer query only narrows it.
+let last = { query: null, matched: [] };
 let selected = 0;
 let searchTimer = null;
 
@@ -25,10 +28,20 @@ function terms() {
   return query.split(/\s+/).filter(Boolean).map((t) => ({ text: t, exact: /[A-Z]/.test(t) }));
 }
 
-// Where `term` matches `text` in order, and how well: consecutive letters
-// and starts of words count more. Null when it doesn't match.
-function fuzzy(term, text) {
-  const hay = term.exact ? text : text.toLowerCase();
+// Each item's title and URL lowercased once, not on every key.
+function prepare(items) {
+  for (const item of items) {
+    item.titleLower = (item.title || "").toLowerCase();
+    item.urlLower = (item.url || "").toLowerCase();
+  }
+  return items;
+}
+
+// Where `term` matches `text` (or its lowercase `lower`) in order, and how
+// well: consecutive letters and starts of words count more. Null when it
+// doesn't match.
+function fuzzy(term, text, lower) {
+  const hay = term.exact ? text : lower;
   const needle = term.exact ? term.text : term.text.toLowerCase();
   const at = hay.indexOf(needle);
   if (at >= 0) {
@@ -49,12 +62,12 @@ function fuzzy(term, text) {
   return { score, hits };
 }
 
-function match(item) {
+function match(item, words) {
   let score = 0;
   const hits = { title: new Set(), url: new Set() };
-  for (const term of terms()) {
-    const inTitle = fuzzy(term, item.title || "");
-    const inUrl = fuzzy(term, item.url || "");
+  for (const term of words) {
+    const inTitle = fuzzy(term, item.title || "", item.titleLower);
+    const inUrl = fuzzy(term, item.url || "", item.urlLower);
     const best = inTitle && (!inUrl || inTitle.score + 5 >= inUrl.score) ? ["title", inTitle, 5] : ["url", inUrl, 0];
     if (!best[1]) return null;
     score += best[1].score + best[2];
@@ -64,11 +77,16 @@ function match(item) {
 }
 
 function filter() {
+  const words = terms();
+  // Typing on narrows what the last query matched; anything else starts over.
+  const narrowing = last.query !== null && query.startsWith(last.query) && !/\s$/.test(last.query);
+  const candidates = narrowing ? last.matched : pool;
   const matched = [];
-  for (const item of pool) {
-    const m = match(item);
+  for (const item of candidates) {
+    const m = match(item, words);
     if (m) matched.push(m);
   }
+  last = { query, matched: matched.map((m) => m.item) };
   matched.sort((a, b) =>
     b.score - a.score || RANK[a.item.kind] - RANK[b.item.kind] || (b.item.when ?? 0) - (a.item.when ?? 0));
   shown = matched.slice(0, MAX_SHOWN);
@@ -77,17 +95,25 @@ function filter() {
   render();
 }
 
+// `text` with the characters at `hits` in bold, one node per run.
 function marked(text, hits) {
   const span = document.createElement("span");
-  [...text].forEach((ch, i) => {
-    if (hits.has(i)) {
-      const b = document.createElement("b");
-      b.textContent = ch;
-      span.append(b);
-    } else {
-      span.append(ch);
+  let run = "";
+  let bold = false;
+  const flush = () => {
+    if (!run) return;
+    span.append(bold ? Object.assign(document.createElement("b"), { textContent: run }) : run);
+    run = "";
+  };
+  for (let i = 0; i < text.length; i++) {
+    const hit = hits.has(i);
+    if (hit !== bold) {
+      flush();
+      bold = hit;
     }
-  });
+    run += text[i];
+  }
+  flush();
   return span;
 }
 
@@ -186,12 +212,16 @@ addEventListener("rtmessage", (e) => {
     withHistory = data.history;
     // A page saved several ways shows once: open tabs, then the first source.
     const seen = new Set();
-    pool = data.items.filter((i) => i.kind === "tab" || (!seen.has(i.url) && seen.add(i.url)));
+    pool = prepare(data.items.filter((i) => i.kind === "tab" || (!seen.has(i.url) && seen.add(i.url))));
+    last = { query: null, matched: [] };
     filter();
   } else if (name === "history") {
     if (data.query !== (terms()[0]?.text ?? "")) return;
     const known = new Set(pool.map((i) => i.url));
-    pool = pool.concat(data.items.filter((i) => !known.has(i.url)));
+    const added = prepare(data.items.filter((i) => !known.has(i.url)));
+    if (!added.length) return;
+    pool = pool.concat(added);
+    last = { query: null, matched: [] };
     filter();
   } else if (name === "type") {
     for (const ch of data.text) press(ch, false);
