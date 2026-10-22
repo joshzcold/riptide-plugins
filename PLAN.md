@@ -24,7 +24,5 @@ them.
 
 ## Flash follow-ups
 
-- **Frames:** label text inside iframes too, with `rt.page.eval` in each
-  frame, placing labels with each frame's offset as hints do.
 - **Labels after the match**, as flash.nvim draws them, rather than over
   its first character.
