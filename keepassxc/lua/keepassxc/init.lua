@@ -29,11 +29,17 @@ local function fields(text)
   return out
 end
 
+local config = {}
+
+local function command(opts)
+  return opts.command or "keepassxc-cli"
+end
+
 function M.new(opts)
   if not opts.database then
     error("keepassxc: set opts.database to your .kdbx file in rt.pack.add")
   end
-  local cmd = opts.command or "keepassxc-cli"
+  local cmd = command(opts)
   local remember = tonumber(opts.remember) or 0
   local cached, cached_at
   local backend = {}
@@ -127,7 +133,12 @@ end
 
 -- Registers with the passwords plugin; rt.pack.add's opts set it up again.
 function M.setup(opts)
-  passwords.register("keepassxc", M.new(opts or {}))
+  config = opts or {}
+  passwords.register("keepassxc", M.new(config))
+end
+
+function M.health(report)
+  site.tool_health(rt.which, report, command(config), "KeePassXC (its keepassxc-cli)")
 end
 
 return M

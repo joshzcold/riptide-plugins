@@ -40,4 +40,19 @@ describe("pass", function()
     wait_field("user", "bob")
     assert.equals("pw-alice", field("pass"), "only the username changed")
   end)
+  it("health finds its tool, or says how to get it", function()
+    local function health()
+      local lines, report = {}, {}
+      for _, level in ipairs({ "ok", "warn", "error" }) do
+        report[level] = function(text) table.insert(lines, level .. " " .. text) end
+      end
+      require("pass").health(report)
+      return lines
+    end
+    assert.matches("^ok .*fake%-pass found", health()[1])
+    require("pass").setup({ command = "/nonexistent/fake-pass", store = plugin_test.dir .. "/test/store" })
+    assert.matches("^error /nonexistent/.* isn't installed or isn't on your PATH", health()[1])
+    -- Back to the test tool for anything after this.
+    require("pass").setup({ command = plugin_test.dir .. "/test/bin/fake-pass", store = plugin_test.dir .. "/test/store" })
+  end)
 end)

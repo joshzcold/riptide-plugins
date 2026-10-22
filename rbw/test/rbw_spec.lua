@@ -29,4 +29,19 @@ describe("rbw", function()
     -- One login belongs here, so there's nothing to pick.
     wait_until(function() return js("window.__submitted") == "ann/pw-ann" end)
   end)
+  it("health finds its tool, or says how to get it", function()
+    local function health()
+      local lines, report = {}, {}
+      for _, level in ipairs({ "ok", "warn", "error" }) do
+        report[level] = function(text) table.insert(lines, level .. " " .. text) end
+      end
+      require("rbw").health(report)
+      return lines
+    end
+    assert.matches("^ok .*fake%-rbw found", health()[1])
+    require("rbw").setup({ command = "/nonexistent/fake-rbw" })
+    assert.matches("^error /nonexistent/.* isn't installed or isn't on your PATH", health()[1])
+    -- Back to the test tool for anything after this.
+    require("rbw").setup({ command = plugin_test.dir .. "/test/bin/fake-rbw" })
+  end)
 end)

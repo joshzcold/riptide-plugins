@@ -6,9 +6,14 @@ local passwords = require("passwords")
 local site = passwords.site
 
 local M = {}
+local config = {}
+
+local function command(opts)
+  return opts.command or "bw"
+end
 
 function M.new(opts)
-  local cmd = opts.command or "bw"
+  local cmd = command(opts)
   local session
   local backend = {}
 
@@ -98,7 +103,12 @@ end
 
 -- Registers with the passwords plugin; rt.pack.add's opts set it up again.
 function M.setup(opts)
-  passwords.register("bitwarden", M.new(opts or {}))
+  config = opts or {}
+  passwords.register("bitwarden", M.new(config))
+end
+
+function M.health(report)
+  site.tool_health(rt.which, report, command(config), "the Bitwarden CLI (bw)")
 end
 
 return M
