@@ -14,7 +14,8 @@ local session
 local bound = {}
 local hooked = false
 -- Fields auto mode leaves alone: rules[host][field] = "never", and
--- rules[host]["*"] = "never" for the whole site.
+-- rules[host]["*"] = "never" for the whole site. filetypes[host][field] is
+-- the filetype last set in nvim for the field, when it isn't nvim's own.
 local store = rt.store("firenvim")
 
 local function hex(bytes)
@@ -100,6 +101,18 @@ local function rule(field)
   return site["*"] or site[field.field]
 end
 
+local function filetype_of(field)
+  return ((store.get("filetypes") or {})[field.host] or {})[field.field]
+end
+
+local function keep_filetype(field, filetype)
+  local all = store.get("filetypes") or {}
+  all[field.host] = all[field.host] or {}
+  all[field.host][field.field] = filetype
+  if next(all[field.host]) == nil then all[field.host] = nil end
+  store.set("filetypes", all)
+end
+
 local function remember(host, field, choice)
   local rules = store.get("rules") or {}
   rules[host] = rules[host] or {}
@@ -180,6 +193,7 @@ local function start(field, token, auto)
       col = field.col,
       name = file_name(field.name),
       font = opts.font,
+      filetype = filetype_of(field),
       -- Auto mode opened it, so it offers to leave the field alone next time.
       dismiss = auto == true,
     }
@@ -210,6 +224,9 @@ local function start(field, token, auto)
         finish(s)
       elseif name == "closed" then
         finish(s)
+      elseif name == "filetype" then
+        local ft = data.filetype ~= data.detected and data.filetype ~= "" and data.filetype or nil
+        keep_filetype(field, ft)
       elseif name == "dismiss" then
         s.dismiss()
       end
@@ -265,12 +282,14 @@ end
 local function forget()
   local host = rt.url():match("^%a[%w+.-]*://([^/?#:]+)")
   local rules = store.get("rules") or {}
-  if not host or not rules[host] then
+  local filetypes = store.get("filetypes") or {}
+  if not host or not (rules[host] or filetypes[host]) then
     return rt.notify("firenvim: nothing remembered for " .. (host or "this page"))
   end
-  rules[host] = nil
+  rules[host], filetypes[host] = nil, nil
   store.set("rules", rules)
-  rt.notify("firenvim: forgot the choices for " .. host .. "; auto mode asks again")
+  store.set("filetypes", filetypes)
+  rt.notify("firenvim: forgot the choices and filetypes for " .. host)
 end
 
 -- The open editor, for tests: whether nvim is attached, and keys for it.
@@ -286,7 +305,7 @@ end
 function M.setup(user_opts)
   opts = user_opts or {}
   rt.command("firenvim", function() M.open(false) end, "Edit the focused text field in nvim, over the field")
-  rt.command("firenvim-forget", forget, "Forget which fields auto mode opens on this site, or leaves alone")
+  rt.command("firenvim-forget", forget, "Forget which fields auto mode leaves alone on this site, and their filetypes")
 
   for _, b in ipairs(bound) do rt.keymap.del(b[1], b[2]) end
   bound = {}
