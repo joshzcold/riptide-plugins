@@ -43,7 +43,7 @@ body.palette:not(.floating) .header {
 }
 body.palette:not(.floating) .row {
   padding: 0 12px;
-  border-radius: 6px;
+  border-radius: 4px;
 }
 body.palette:not(.floating) .row.selected { background: var(--noice-selected); color: var(--fg); }
 body.palette:not(.floating) .row.selected .desc,
@@ -67,9 +67,9 @@ body.floating .header {
   text-transform: uppercase;
 }
 body.floating .prompt-site { font-weight: bold; padding-bottom: 4px; }
-body.floating .prompt-input { padding: 0 10px; border-radius: 6px; }
+body.floating .prompt-input { padding: 0 10px; border-radius: 4px; }
 /* riptide gives each option a row and 4px. */
-body.floating .prompt-option { height: calc(var(--row-height) + 4px); border-radius: 6px; }
+body.floating .prompt-option { height: calc(var(--row-height) + 4px); border-radius: 4px; }
 ]]
 
 -- The tab bar: rounded tabs on the bar's own color, the current one tinted.
@@ -81,7 +81,7 @@ body:not(.vertical) .tab:nth-child(even) {
   flex: 0 1 260px;
   background: none;
   color: var(--noice-muted);
-  border-radius: 999px;
+  border-radius: 5px;
   padding: 3px 14px 3px 10px;
 }
 body:not(.vertical) .tab.selected {
@@ -109,7 +109,7 @@ local STATUSBAR = [[
 #bar.insert #left, #bar.passthrough #left, #bar.private #left {
   flex: none;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 0.85em;
   font-weight: bold;
 }

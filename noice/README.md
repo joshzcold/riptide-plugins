@@ -20,7 +20,8 @@ The palette and the centered questions need two settings of your own; noice
 only styles them, and never changes your settings:
 
 ```lua
-c.ui.overlay.position = "floating"  -- the command line in a box near the top
+c.ui.overlay.position = "floating"  -- the command line in a box near the top,
+                                    -- or "center" for the middle (riptide after 0.8.0)
 c.prompt.position = "center"        -- questions in the middle of the page
 
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "noice", opts = {
