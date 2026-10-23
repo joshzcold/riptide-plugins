@@ -27,6 +27,7 @@ them and checks for updates.
 | [oil](oil) | Edit your tabs, bookmarks and quickmarks as text in nvim |
 | [flash](flash) | Jump to any text on screen by two of its characters |
 | [reader](reader) | Read a page's article alone, cleanly typeset |
+| [noice](noice) | A cleaner command line, questions, tabs and status bar |
 
 ## Writing one
 

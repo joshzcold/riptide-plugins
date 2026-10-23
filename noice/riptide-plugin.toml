@@ -1,0 +1,37 @@
+name = "noice"
+description = "A cleaner look for riptide's command line, questions, tabs and status bar, like noice.nvim"
+# rt.ui.css.
+riptide = ">=0.8"
+
+[permissions]
+# Styles riptide's own bars and questions; it never hides or rewords them.
+ui = true
+
+[[option]]
+name = "accent"
+description = "The accent color, as CSS (e.g. \"#7aa2f7\"); the theme's selection color when unset"
+type = "string"
+
+[[option]]
+name = "cmdline"
+description = "The command line as a palette (needs ui.overlay.position = \"floating\")"
+type = "bool"
+default = true
+
+[[option]]
+name = "prompts"
+description = "Questions in a framed box (best with prompt.position = \"center\")"
+type = "bool"
+default = true
+
+[[option]]
+name = "tabs"
+description = "Rounded tabs"
+type = "bool"
+default = true
+
+[[option]]
+name = "statusbar"
+description = "A quiet status bar with the mode as a pill"
+type = "bool"
+default = true
