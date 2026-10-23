@@ -23,7 +23,7 @@ describe("noice", function()
   it("refuses an accent that isn't a color", function()
     clear_messages()
     noice().setup({ accent = "red; } body { display: none" })
-    assert.falsy(noice().css():find("display: none", 1, true))
+    assert.falsy(noice().css():find("red; } body", 1, true))
     wait_until(function() return (last_message() or ""):find("accent is a CSS color", 1, true) ~= nil end)
   end)
 
