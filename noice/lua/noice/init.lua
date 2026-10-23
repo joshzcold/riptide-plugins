@@ -82,7 +82,7 @@ body:not(.vertical) .tab:nth-child(even) {
   background: none;
   color: var(--noice-muted);
   border-radius: 5px;
-  padding: 3px 14px 3px 10px;
+  padding: 3px 12px;
 }
 body:not(.vertical) .tab.selected {
   background: var(--noice-selected);
@@ -91,7 +91,9 @@ body:not(.vertical) .tab.selected {
 }
 body:not(.vertical) .tab.pinned:not(.selected) { background: none; color: var(--pinned-fg); }
 /* A pinned tab shrunk to its icon (tabs.pinned.shrink) keeps riptide's width. */
-body:not(.vertical) .tab.shrunk { flex: 0 0 auto; padding: 3px 10px; }
+body:not(.vertical) .tab.shrunk { flex: 0 0 auto; padding: 3px 8px; }
+/* The dot only while loading or failed, so an idle tab's room is even. */
+body:not(.vertical) .tab:not(.loading):not(.error) .indicator { display: none; }
 body:not(.vertical) .tab .indicator {
   width: 6px;
   height: 6px;
