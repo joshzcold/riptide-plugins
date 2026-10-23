@@ -89,7 +89,9 @@ body:not(.vertical) .tab.selected {
   color: var(--selected-fg);
   box-shadow: none;
 }
-body:not(.vertical) .tab.pinned { background: none; color: var(--pinned-fg); }
+body:not(.vertical) .tab.pinned:not(.selected) { background: none; color: var(--pinned-fg); }
+/* A pinned tab shrunk to its icon (tabs.pinned.shrink) keeps riptide's width. */
+body:not(.vertical) .tab.shrunk { flex: 0 0 auto; padding: 3px 10px; }
 body:not(.vertical) .tab .indicator {
   width: 6px;
   height: 6px;
