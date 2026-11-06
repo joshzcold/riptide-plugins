@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+# Ollama's /api/generate, as curl gets it: a summary naming the model, or
+# Ollama's error for the model "missing".
+import json, sys
+
+request = json.load(sys.stdin)
+if request["model"] == "missing":
+    print(json.dumps({"error": 'model "missing" not found, try pulling it first'}))
+    sys.exit(22)
+assert "Title: Life in the tide pools" in request["prompt"], request["prompt"]
+answer = "<think>plan the script</think># Tide pools\n**Tide pools** teem with life, says %s." % request["model"]
+print(json.dumps({"model": request["model"], "response": answer, "done": True}))

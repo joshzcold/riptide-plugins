@@ -1,0 +1,133 @@
+:root {
+  --bg: #fbf8f1;
+  --fg: #2b2a28;
+  --muted: #7a756c;
+  --link: #2b5d9b;
+  --rule: #e3ddd0;
+  --card: #f4efe4;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1d1c1a;
+    --fg: #e6e1d6;
+    --muted: #9a958b;
+    --link: #8ab4e8;
+    --rule: #3a3833;
+    --card: #262522;
+  }
+}
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, sans-serif;
+}
+
+main {
+  max-width: 44em;
+  margin: 0 auto;
+  padding: 2em 1em 6em;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  margin-bottom: 1.5em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.6em;
+}
+
+input, select, button {
+  font: inherit;
+  color: inherit;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.25em 0.6em;
+}
+
+button {
+  cursor: pointer;
+}
+
+#player {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75em;
+  padding: 0.75em 0;
+  margin-bottom: 1em;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+
+#now {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 600;
+}
+
+#audio {
+  flex: 1;
+  min-width: 16em;
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.clip {
+  padding: 1em 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.clip.current h2 {
+  color: var(--link);
+}
+
+.clip h2 {
+  margin: 0 0 0.2em;
+  font-size: 1.1em;
+}
+
+.actions {
+  float: right;
+  display: flex;
+  gap: 0.4em;
+  margin-left: 1em;
+}
+
+.meta, .muted {
+  color: var(--muted);
+  font-size: 0.9em;
+  margin: 0;
+}
+
+a {
+  color: var(--link);
+}
+
+details {
+  margin-top: 0.4em;
+  font-size: 0.95em;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--muted);
+}
