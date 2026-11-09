@@ -1,6 +1,6 @@
 name = "listen"
 description = "Hear a spoken summary of the page, made by a local LLM and Piper, and keep the clips"
-riptide = ">=0.17"
+riptide = ">=0.20"
 # Readability, to find the article.
 dependencies = ["reader"]
 

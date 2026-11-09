@@ -40,4 +40,4 @@ the voice and ffmpeg.
 
 It brings [reader](../reader), for Readability. It asks to read the pages you
 use it on, to run curl, piper and ffmpeg, and to read and delete the clips it
-saved. Playing a clip needs a riptide newer than 0.17.0 (riptide#159).
+saved. It needs riptide 0.20 or newer, whose plugin pages can play audio.
