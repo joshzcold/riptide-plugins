@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+# piper --model VOICE --output_file OUT: half a second of silence, as WAV.
+import sys, wave
+
+args = sys.argv[1:]
+out = args[args.index("--output_file") + 1]
+assert sys.stdin.read().strip(), "no text"
+with wave.open(out, "wb") as w:
+    w.setnchannels(1)
+    w.setsampwidth(2)
+    w.setframerate(22050)
+    w.writeframes(b"\0\0" * 11025)

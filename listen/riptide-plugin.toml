@@ -1,0 +1,55 @@
+name = "listen"
+description = "Hear a spoken summary of the page, made by a local LLM and Piper, and keep the clips"
+riptide = ">=0.20"
+# Readability, to find the article.
+dependencies = ["reader"]
+
+[permissions]
+# Reads the article out of the page you're on.
+pages = ["*"]
+# Runs curl (to reach Ollama), piper and ffmpeg.
+spawn = true
+# Reads and deletes the clips it saved, to play them on its page.
+files = true
+
+[[option]]
+name = "key"
+description = "The key that makes a spoken summary of the page"
+default = "gA"
+
+[[option]]
+name = "voice"
+type = "path"
+description = "A Piper voice's .onnx file, e.g. en_US-lessac-medium.onnx"
+required = true
+
+[[option]]
+name = "model"
+description = "The Ollama model that writes the summary"
+default = "llama3.2"
+
+[[option]]
+name = "ollama"
+description = "Where Ollama listens"
+default = "http://localhost:11434"
+
+[[option]]
+name = "words"
+type = "number"
+description = "About how long the summary is, in words"
+default = 150
+
+[[option]]
+name = "piper"
+type = "path"
+description = "The piper program, if it isn't on your PATH"
+
+[[option]]
+name = "ffmpeg"
+type = "path"
+description = "The ffmpeg program, if it isn't on your PATH; without it, clips stay as larger WAV files"
+
+[[option]]
+name = "dir"
+type = "path"
+description = "Where clips are saved (default: riptide/listen in your data folder)"
