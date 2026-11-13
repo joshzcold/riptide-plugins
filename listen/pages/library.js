@@ -1,5 +1,6 @@
-// The clips the plugin saved. Playing one asks the plugin for its bytes and
-// plays them from a blob: URL.
+// The clips the plugin saved. Playing one asks the plugin for its bytes, which
+// come in parts, and plays them from a blob: URL beside their text, following
+// along paragraph by paragraph.
 "use strict";
 
 const send = (name, data) => rt.send(name, JSON.stringify(data ?? {}));
@@ -11,6 +12,13 @@ let pending = [];
 let playing = null;
 let url = null;
 let ready = true;
+// The clip arriving: { id, mime, parts, chunks }.
+let incoming = null;
+// The transcript's paragraphs with start times, and the one being read.
+let timed = [];
+let current = -1;
+// Following along pauses for a while after you scroll the text yourself.
+let followAfter = 0;
 
 function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props);
@@ -47,13 +55,15 @@ function row(clip) {
     e.preventDefault();
     send("open", { url: clip.url });
   });
-  const summary = el("details", {}, el("summary", { textContent: "Summary" }), el("p", { textContent: clip.summary }));
+  const summary = clip.summary
+    ? el("details", {}, el("summary", { textContent: "Summary" }), el("p", { textContent: clip.summary }))
+    : "";
   return el(
     "li",
     { className: clip.id === playing ? "clip current" : "clip" },
     el("div", { className: "actions" }, play, remove),
     el("h2", { textContent: clip.title }),
-    el("p", { className: "meta" }, source, ` · ${when(clip.created)} · ${duration(clip.seconds)}`),
+    el("p", { className: "meta" }, source, ` · ${clip.mode === "summary" ? "summary · " : ""}${when(clip.created)} · ${duration(clip.seconds)}`),
     summary,
   );
 }
@@ -127,7 +137,7 @@ function render() {
     return words.every((w) => text.includes(w));
   });
   $("pending").replaceChildren(
-    ...pending.map((j) => el("li", { className: "muted", textContent: `${j.stage === "speaking" ? "Speaking" : "Summarizing"} “${j.title}”…` })),
+    ...pending.map((j) => el("li", { className: "muted", textContent: `${j.stage === "speaking" ? "Reading" : "Summarizing"} “${j.title}”…` })),
   );
   $("clips").replaceChildren(
     ...(shown.length
@@ -137,23 +147,74 @@ function render() {
   send("shown", { clips: shown.length, pending: pending.length });
 }
 
+function transcript(paragraphs) {
+  timed = [];
+  current = -1;
+  const nodes = (Array.isArray(paragraphs) ? paragraphs : []).map((p) => {
+    const node = el("p", { className: p.heading ? "heading" : "", textContent: p.text });
+    if (typeof p.start === "number") {
+      node.classList.add("timed");
+      node.title = "Play from here";
+      node.addEventListener("click", () => {
+        audio.currentTime = p.start;
+        followAfter = 0;
+        audio.play().catch(() => {});
+      });
+      timed.push({ start: p.start, node });
+    }
+    return node;
+  });
+  $("transcript").replaceChildren(...nodes);
+  $("transcript").hidden = nodes.length === 0;
+  $("transcript").scrollTop = 0;
+}
+
+// Marks the paragraph being read and scrolls it into view.
+function follow() {
+  let i = timed.length - 1;
+  while (i >= 0 && timed[i].start > audio.currentTime + 0.05) i--;
+  if (i === current) return;
+  if (current >= 0) timed[current].node.classList.remove("now");
+  current = i;
+  if (i < 0) return;
+  const node = timed[i].node;
+  node.classList.add("now");
+  if (Date.now() < followAfter) return;
+  const box = $("transcript");
+  box.scrollTo({ top: node.offsetTop - box.clientHeight / 3, behavior: "smooth" });
+}
+
 function play(data) {
   if (data.id !== playing) return;
   if (data.error) {
     $("now").textContent = data.error;
     return send("loaded", { id: data.id, error: data.error });
   }
-  const bytes = Uint8Array.from(atob(data.data), (c) => c.charCodeAt(0));
+  transcript(data.paragraphs);
+  incoming = { id: data.id, mime: data.mime, parts: data.parts, chunks: [] };
+}
+
+function part(data) {
+  if (!incoming || data.id !== incoming.id || data.id !== playing) return;
+  incoming.chunks[data.index - 1] = Uint8Array.from(atob(data.data), (c) => c.charCodeAt(0));
+  if (incoming.chunks.filter(Boolean).length < incoming.parts) return;
+  const blob = new Blob(incoming.chunks, { type: incoming.mime });
+  incoming = null;
   if (url) URL.revokeObjectURL(url);
-  url = URL.createObjectURL(new Blob([bytes], { type: data.mime }));
+  url = URL.createObjectURL(blob);
   audio.src = url;
   audio.playbackRate = Number($("speed").value);
   audio.play().catch(() => {});
 }
 
-audio.addEventListener("loadedmetadata", () => send("loaded", { id: playing, duration: audio.duration }));
+audio.addEventListener("loadedmetadata", () => send("loaded", { id: playing, duration: audio.duration, timed: timed.length }));
 audio.addEventListener("error", () => send("loaded", { id: playing, error: audio.error?.message || "can't play this clip" }));
 $("speed").addEventListener("change", () => { audio.playbackRate = Number($("speed").value); });
+audio.addEventListener("timeupdate", follow);
+audio.addEventListener("seeked", follow);
+for (const event of ["wheel", "touchmove"]) {
+  $("transcript").addEventListener(event, () => { followAfter = Date.now() + 5000; }, { passive: true });
+}
 $("filter").addEventListener("input", render);
 $("recheck").addEventListener("click", (e) => {
   e.preventDefault();
@@ -174,6 +235,8 @@ addEventListener("rtmessage", (e) => {
     status(data);
   } else if (name === "audio") {
     play(data);
+  } else if (name === "audio_part") {
+    part(data);
   }
 });
 

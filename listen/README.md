@@ -1,18 +1,26 @@
 # listen
 
-Hear a spoken summary of the page you're on, written by a local LLM and read
-aloud by [Piper](https://github.com/OHF-Voice/piper1-gpl), and keep the clips
-to play later.
+Hear the article on the page you're on read aloud by
+[Piper](https://github.com/OHF-Voice/piper1-gpl), or a short summary of it
+written by a local LLM, and keep the clips to play later, with the text
+following along.
 
-`gA` (or `:listen`) finds the article with reader's Readability, asks
-[Ollama](https://ollama.com) for a short summary meant to be heard, and has
-Piper read it into a clip. It works in the background, so keep browsing;
-a message says when the clip is ready. `:listen-library` lists your clips,
-newest first, to play (at 0.75× to 2×), filter, read the summary, open the
-page it came from, or delete.
+`gA` (or `:listen`) finds the article with reader's Readability and has Piper
+read it into a clip, paragraph by paragraph. `:listen summary` asks
+[Ollama](https://ollama.com) for a short summary meant to be heard and reads
+that instead (`read = "summary"` makes it what `gA` does). It works in the
+background, so keep browsing; a message says when the clip is ready. Articles
+longer than about an hour of speech are cut there.
 
-Nothing leaves your computer: the article goes to Ollama on `localhost`, and
-the clips are saved in `~/.local/share/riptide/listen` (or the `dir` option).
+`:listen-library` lists your clips, newest first, to play (at 0.75× to 2×),
+filter, open the page it came from, or delete. While one plays, its text shows
+under the player with the paragraph being read marked and scrolled into view;
+click a paragraph to jump to it. Scrolling the text yourself pauses following
+for a few seconds.
+
+Nothing leaves your computer: summaries are written by Ollama on `localhost`,
+and the clips are saved in `~/.local/share/riptide/listen` (or the `dir`
+option).
 
 ## Setup
 
@@ -20,9 +28,9 @@ the clips are saved in `~/.local/share/riptide/listen` (or the `dir` option).
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen" })
 ```
 
-Then open `:listen-library`. Its Setup section checks for Ollama, the model,
-Piper, a voice and ffmpeg, and for each one that's missing either does it for
-you or shows the command for your system:
+Then open `:listen-library`. Its Setup section checks for Piper, a voice and
+ffmpeg, and, for summaries, Ollama and the model. For each one that's missing,
+it either does it for you or shows the command for your system:
 
 - **Ollama**: the install command, or how to start it if it's installed but
   not answering.
@@ -47,7 +55,8 @@ Options, all optional:
 ```lua
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen", opts = {
   voice = os.getenv("HOME") .. "/.local/share/piper/en_US-lessac-medium.onnx", -- another voice
-  model = "llama3.2",              -- any model in Ollama
+  read = "article",                -- or "summary"
+  model = "llama3.2",              -- any model in Ollama, for summaries
   words = 150,                     -- about how long the summary is
   -- ollama = "http://localhost:11434",
   -- key = "gA",                   -- false for none

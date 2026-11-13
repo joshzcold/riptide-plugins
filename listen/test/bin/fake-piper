@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-# piper --model VOICE --output_file OUT: half a second of silence, as WAV.
-import sys, wave
+# piper --model VOICE --output_dir DIR: half a second of silence as WAV for
+# each line, logged as piper1 does.
+import os, sys, time, wave
 
 args = sys.argv[1:]
-out = args[args.index("--output_file") + 1]
-assert sys.stdin.read().strip(), "no text"
-with wave.open(out, "wb") as w:
-    w.setnchannels(1)
-    w.setsampwidth(2)
-    w.setframerate(22050)
-    w.writeframes(b"\0\0" * 11025)
+out = args[args.index("--output_dir") + 1]
+lines = [line.strip() for line in sys.stdin if line.strip()]
+assert lines, "no text"
+for line in lines:
+    path = os.path.join(out, "%d.wav" % time.monotonic_ns())
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(22050)
+        w.writeframes(b"\0\0" * 11025)
+    print("INFO:__main__:Wrote " + path, file=sys.stderr)

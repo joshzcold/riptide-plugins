@@ -1,6 +1,6 @@
--- A spoken summary of the page you're on: Readability finds the article, a
--- local LLM in Ollama writes a summary meant to be heard, and Piper reads it
--- into a clip. :listen-library lists the clips and plays them.
+-- The page you're on, read aloud: Readability finds the article, Piper reads
+-- it (or a summary a local LLM in Ollama writes) into a clip, paragraph by
+-- paragraph. :listen-library lists the clips and plays them with their text.
 local readability = require("reader.readability")
 
 local M = {}
@@ -16,24 +16,46 @@ local bound = {}
 local store = rt.store()
 local libraries = {}
 
-local MAX_CHARS = 20000
+-- How much of an article goes to the LLM, and how much is read aloud (about
+-- an hour).
+local SUMMARY_CHARS = 20000
+local ARTICLE_CHARS = 60000
 
--- In the page: the article's title and text, or null if there's none.
+-- In the page: the article's title, text and paragraphs, or null if there's none.
 local EXTRACT_JS = "(() => {\n" .. readability .. [[
 
-  const article = new Readability(document.cloneNode(true)).parse();
+  const article = new Readability(document.cloneNode(true), { serializer: (el) => el }).parse();
   if (!article || !article.textContent || (article.length ?? 0) < 200) return null;
+  const title = (article.title || document.title).trim();
+  const blocks = "h1,h2,h3,h4,h5,h6,p,li,blockquote,dt,dd";
+  const paragraphs = [];
+  let total = 0;
+  let truncated = false;
+  for (const el of article.content.querySelectorAll(blocks)) {
+    if (el.parentElement?.closest(blocks) || el.closest("pre, table, figure")) continue;
+    const text = el.textContent.replace(/\s+/g, " ").trim();
+    if (!/[\p{L}\p{N}]/u.test(text) || (!paragraphs.length && text === title)) continue;
+    if (total + text.length > ]] .. ARTICLE_CHARS .. [[) {
+      truncated = true;
+      break;
+    }
+    total += text.length;
+    paragraphs.push({ text, heading: /^H[1-6]$/.test(el.tagName) });
+  }
   return {
-    title: article.title || document.title,
+    title,
     site: article.siteName || location.hostname,
-    text: article.textContent.replace(/\s+/g, " ").trim().slice(0, ]] .. MAX_CHARS .. [[),
+    text: article.textContent.replace(/\s+/g, " ").trim().slice(0, ]] .. SUMMARY_CHARS .. [[),
+    paragraphs,
+    truncated,
     url: location.href,
   };
 })()]]
 
 local PROMPT = [[Summarize this article as a short script to be read aloud, about %d words.
-Write plain spoken sentences: no headings, lists, markdown, links or emoji.
-Start with what it's about, not with "This article".
+Write plain spoken sentences in a few short paragraphs separated by blank lines:
+no headings, lists, markdown, links or emoji, and no preamble.
+Start with what it's about, not with "This article" or "Here's a summary".
 
 Title: %s
 
@@ -52,6 +74,9 @@ function M.dir()
 end
 
 function M.clips() return store.get("clips") or {} end
+
+-- What gA reads: "article" or "summary".
+function M.mode() return opts.read == "summary" and "summary" or "article" end
 
 local function find(id)
   for i, clip in ipairs(M.clips()) do
@@ -124,7 +149,18 @@ local function endpoint() return (opts.ollama or "http://localhost:11434"):gsub(
 -- The LLM's answer as plain sentences for Piper: no reasoning, no markdown.
 function M.clean(text)
   text = (text or ""):gsub("<think>.-</think>", ""):gsub("[*_#`]", "")
-  return trim(text)
+  text = trim(text):gsub("^[Hh]ere[’']?s [^\n]-:%s*", "")
+  return text
+end
+
+-- Text as paragraphs, split at blank lines.
+function M.paragraphs(text)
+  local list = {}
+  for block in ((text or "") .. "\n\n"):gmatch("(.-)\n%s*\n") do
+    local para = trim(block:gsub("%s+", " "))
+    if para:match("[%w\128-\255]") then table.insert(list, { text = para }) end
+  end
+  return list
 end
 
 function M.summarize(article, callback)
@@ -156,34 +192,123 @@ function M.summarize(article, callback)
   end)
 end
 
--- Seconds of audio in a WAV file, from its header.
-local function wav_seconds(path)
+-- A WAV file's format, and where its samples are: { fmt, byte_rate, offset, size }.
+local function wav_info(path)
   local f = io.open(path, "rb")
   if not f then return nil end
-  local header = f:read(44)
-  local size = f:seek("end")
+  local head = f:read(12)
+  if not head or #head < 12 or head:sub(1, 4) ~= "RIFF" or head:sub(9, 12) ~= "WAVE" then
+    f:close()
+    return nil
+  end
+  local info = {}
+  while true do
+    local chunk = f:read(8)
+    if not chunk or #chunk < 8 then break end
+    local kind, size = chunk:sub(1, 4), string.unpack("<I4", chunk, 5)
+    if kind == "fmt " then
+      local fmt = f:read(size)
+      info.fmt = fmt:sub(1, 16)
+      info.byte_rate = string.unpack("<I4", fmt, 9)
+      info.block_align = string.unpack("<I2", fmt, 13)
+      if size % 2 == 1 then f:read(1) end
+    elseif kind == "data" then
+      info.offset = f:seek()
+      -- A WAV written as a stream gives its size as 0xFFFFFFFF.
+      info.size = math.min(size, f:seek("end") - info.offset)
+      break
+    else
+      f:seek("cur", size + size % 2)
+    end
+  end
   f:close()
-  if not header or #header < 44 or header:sub(1, 4) ~= "RIFF" then return nil end
-  local rate = string.unpack("<I4", header, 29)
-  if rate == 0 then return nil end
-  return (size - 44) / rate
+  if info.fmt and info.offset and (info.byte_rate or 0) > 0 then return info end
 end
 
-function M.speak(text, id, callback)
+-- Joins WAV files of one format into out, with gap seconds of silence between;
+-- returns when each starts and the total, in seconds.
+local function join(paths, out, gap)
+  local first = wav_info(paths[1])
+  if not first then return nil, "piper wrote no audio" end
+  local w = io.open(out, "wb")
+  if not w then return nil, "couldn't write " .. out end
+  w:write(string.rep("\0", 44))
+  local silence = string.rep("\0", math.floor(first.byte_rate * gap / first.block_align) * first.block_align)
+  local starts, total = {}, 0
+  for i, path in ipairs(paths) do
+    local info = wav_info(path)
+    if not info or info.fmt ~= first.fmt then
+      w:close()
+      return nil, "piper wrote parts in different formats"
+    end
+    if i > 1 then
+      w:write(silence)
+      total = total + #silence
+    end
+    starts[i] = total / first.byte_rate
+    local f = io.open(path, "rb")
+    f:seek("set", info.offset)
+    local left = info.size
+    while left > 0 do
+      local data = f:read(math.min(left, 1 << 20))
+      if not data then break end
+      w:write(data)
+      left = left - #data
+    end
+    f:close()
+    total = total + info.size
+  end
+  w:seek("set", 0)
+  w:write("RIFF", string.pack("<I4", 36 + total), "WAVE", "fmt ", string.pack("<I4", 16), first.fmt,
+    "data", string.pack("<I4", total))
+  w:close()
+  return starts, total / first.byte_rate
+end
+
+-- The WAV files piper says it wrote, in order: piper1 logs "Wrote PATH", the
+-- older piper prints each path.
+local function written(r)
+  local paths = {}
+  for path in (r.stderr or ""):gmatch("Wrote ([^\n]-%.wav)") do table.insert(paths, path) end
+  if #paths == 0 then
+    for path in (r.stdout or ""):gmatch("([^\n]-%.wav)\n") do table.insert(paths, path) end
+  end
+  return paths
+end
+
+-- Reads paragraphs ({ text, heading }) into a clip, one piper part each, so
+-- each paragraph's start is known. callback(file, seconds) or (nil, nil, err);
+-- the paragraphs get their start times.
+function M.speak(paragraphs, id, callback)
   local dir = M.dir()
+  local parts = dir .. "/" .. id .. ".parts"
   local wav = dir .. "/" .. id .. ".wav"
-  rt.spawn({ "mkdir", "-p", dir }, function(made)
-    if made.code ~= 0 then return callback(nil, nil, "couldn't make " .. dir .. ": " .. trim(made.stderr)) end
-    rt.spawn({ program("piper") or "piper", "--model", M.voice(), "--output_file", wav }, { stdin = text }, function(r)
-      local seconds = wav_seconds(wav)
-      if r.error or r.code ~= 0 or not seconds then
-        return callback(nil, nil, "piper failed: " .. trim(r.error or r.stderr))
+  local lines = {}
+  for i, p in ipairs(paragraphs) do lines[i] = p.text end
+  rt.spawn({ "mkdir", "-p", parts }, function(made)
+    if made.code ~= 0 then return callback(nil, nil, "couldn't make " .. parts .. ": " .. trim(made.stderr)) end
+    local argv = { program("piper") or "piper", "--model", M.voice(), "--output_dir", parts }
+    rt.spawn(argv, { stdin = table.concat(lines, "\n") .. "\n" }, function(r)
+      local paths = written(r)
+      local function cleanup()
+        for _, path in ipairs(paths) do os.remove(path) end
+        os.remove(parts)
+      end
+      if r.error or r.code ~= 0 or #paths == 0 then
+        cleanup()
+        local why = trim(r.error or r.stderr):match("[^\n]*$")
+        return callback(nil, nil, "piper failed: " .. why)
+      end
+      local starts, seconds = join(paths, wav, 0.4)
+      cleanup()
+      if not starts then return callback(nil, nil, seconds) end
+      if #starts == #paragraphs then
+        for i, p in ipairs(paragraphs) do p.start = starts[i] end
       end
       local ffmpeg = program("ffmpeg")
       if not ffmpeg then return callback(id .. ".wav", seconds) end
       local ogg = dir .. "/" .. id .. ".ogg"
-      local argv = { ffmpeg, "-y", "-loglevel", "error", "-i", wav, "-c:a", "libopus", "-b:a", "32k", ogg }
-      rt.spawn(argv, function(c)
+      rt.spawn({ ffmpeg, "-y", "-loglevel", "error", "-i", wav, "-c:a", "libopus", "-b:a", "32k", ogg }, function(c)
         if c.code ~= 0 then return callback(id .. ".wav", seconds) end
         os.remove(wav)
         callback(id .. ".ogg", seconds)
@@ -198,38 +323,49 @@ local function done(job)
   end
 end
 
-function M.make()
+-- Makes a clip of the page: mode is "article" or "summary", else the read option's.
+function M.make(mode)
+  if mode ~= "article" and mode ~= "summary" then mode = M.mode() end
   if not program("piper") or not exists(M.voice()) then
     notify("piper and a voice aren't set up yet; see the setup on this page", "error")
     return M.library()
   end
   local url = rt.url()
   if not url:match("^https?://") and not url:match("^file://") then
-    return notify("this page has no article to summarize", "warning")
+    return notify("this page has no article to read", "warning")
   end
   rt.page.eval(EXTRACT_JS, function(article, err)
     if err then return notify(err, "error") end
     if not article then return notify("no article found on this page", "warning") end
     local id = os.date("%Y%m%d-%H%M%S") .. string.format("-%04d", math.random(0, 9999))
-    local job = { id = id, title = article.title, url = article.url, stage = "summarizing" }
+    local job = { id = id, title = article.title, url = article.url, stage = mode == "summary" and "summarizing" or "speaking" }
     table.insert(M.pending, job)
     refresh()
-    notify("summarizing “" .. article.title .. "”…")
+    notify((mode == "summary" and "summarizing “" or "reading “") .. article.title .. "”…")
     local function fail(message)
       done(job)
       refresh()
       notify(message, "error")
     end
-    M.summarize(article, function(summary, serr)
-      if not summary then return fail(serr) end
+
+    local function speak(paragraphs, summary)
       job.stage = "speaking"
       refresh()
-      M.speak(summary, id, function(file, seconds, perr)
+      table.insert(paragraphs, 1, { text = article.title, heading = true })
+      M.speak(paragraphs, id, function(file, seconds, perr)
         if not file then return fail(perr) end
+        local text_file = id .. ".json"
+        local f = io.open(M.dir() .. "/" .. text_file, "wb")
+        if f then
+          f:write(rt.json.encode({ paragraphs = paragraphs }))
+          f:close()
+        end
         local clips = M.clips()
         table.insert(clips, 1, {
           id = id,
           file = file,
+          text_file = f and text_file or nil,
+          mode = mode,
           title = article.title,
           site = article.site,
           url = article.url,
@@ -240,8 +376,24 @@ function M.make()
         store.set("clips", clips)
         done(job)
         refresh()
-        notify("ready: “" .. article.title .. "” (:listen-library)")
+        local more = article.truncated and "; it's the first hour of a longer article" or ""
+        notify("ready: “" .. article.title .. "”" .. more .. " (:listen-library)")
       end)
+    end
+
+    if mode == "article" then
+      local paragraphs = {}
+      for _, p in ipairs(article.paragraphs or {}) do
+        table.insert(paragraphs, { text = p.text, heading = p.heading or nil })
+      end
+      if #paragraphs == 0 then paragraphs = M.paragraphs(article.text) end
+      return speak(paragraphs)
+    end
+    M.summarize(article, function(summary, serr)
+      if not summary then return fail(serr) end
+      local paragraphs = M.paragraphs(summary)
+      if #paragraphs == 0 then return fail("Ollama's summary was empty") end
+      speak(paragraphs, summary)
     end)
   end)
 end
@@ -270,20 +422,49 @@ function M.base64(s)
   return table.concat(out)
 end
 
+-- A clip's paragraphs: from its text file, else its summary as one.
+function M.text(clip)
+  local f = clip.text_file and io.open(M.dir() .. "/" .. clip.text_file, "rb")
+  if f then
+    local ok, data = pcall(rt.json.decode, f:read("a"))
+    f:close()
+    if ok and type(data) == "table" and type(data.paragraphs) == "table" then return data.paragraphs end
+  end
+  if clip.summary then return { { text = clip.summary } } end
+  return {}
+end
+
+-- Audio goes to the page in parts, a callback each, so a long clip doesn't
+-- run into the 2-second limit; a multiple of 3 bytes base64-encodes alone.
+local PART = 3 * 262144
+
 function M.play(id, page)
   local clip = find(id)
-  local f = clip and io.open(M.dir() .. "/" .. clip.file, "rb")
+  local path = clip and (M.dir() .. "/" .. clip.file)
+  local f = path and io.open(path, "rb")
   if not f then return page:send("audio", { id = id, error = "this clip's file is gone" }) end
-  local data = f:read("a")
+  local size = f:seek("end")
   f:close()
+  local parts = math.max(1, math.ceil(size / PART))
   local mime = clip.file:match("%.ogg$") and "audio/ogg" or "audio/wav"
-  page:send("audio", { id = id, mime = mime, data = M.base64(data) })
+  page:send("audio", { id = id, mime = mime, parts = parts, paragraphs = M.text(clip) })
+  local function send(i)
+    local fh = io.open(path, "rb")
+    if not fh then return end
+    fh:seek("set", (i - 1) * PART)
+    local data = fh:read(PART) or ""
+    fh:close()
+    if not pcall(page.send, page, "audio_part", { id = id, index = i, data = M.base64(data) }) then return end
+    if i < parts then rt.defer(0, function() send(i + 1) end) end
+  end
+  rt.defer(0, function() send(1) end)
 end
 
 function M.delete(id)
   local clip, i = find(id)
   if not clip then return end
   os.remove(M.dir() .. "/" .. clip.file)
+  if clip.text_file then os.remove(M.dir() .. "/" .. clip.text_file) end
   local clips = M.clips()
   table.remove(clips, i)
   store.set("clips", clips)
@@ -478,6 +659,15 @@ end
 function M.check(callback)
   local items = M.local_checks()
   local function finish(ollama)
+    -- Reading articles needs no LLM; only summaries do.
+    if M.mode() == "article" then
+      for _, item in ipairs(ollama) do
+        if not item.ok then
+          item.optional = true
+          item.detail = "only for summaries (:listen summary): " .. item.detail
+        end
+      end
+    end
     for i = #ollama, 1, -1 do table.insert(items, 1, ollama[i]) end
     local ready = true
     for _, item in ipairs(items) do
@@ -635,13 +825,16 @@ end
 
 function M.setup(user_opts)
   opts = user_opts or {}
-  rt.command("listen", function() M.make() end, "Make a spoken summary of this page")
-  rt.command("listen-library", function() M.library() end, "Browse and play your spoken summaries")
+  rt.command("listen", function(args) M.make(trim(args)) end, {
+    desc = "Read this page's article aloud; :listen summary for a spoken summary",
+    complete = function() return { "article", "summary" } end,
+  })
+  rt.command("listen-library", function() M.library() end, "Browse and play what you've listened to")
   for _, lhs in ipairs(bound) do rt.keymap.del("normal", lhs) end
   bound = {}
   local key = opts.key == nil and "gA" or opts.key
   if key and key ~= "" then
-    rt.keymap.set("normal", key, function() M.make() end, { desc = "Spoken summary of this page" })
+    rt.keymap.set("normal", key, function() M.make() end, { desc = "Read this page aloud" })
     table.insert(bound, key)
   end
 end

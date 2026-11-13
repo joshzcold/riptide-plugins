@@ -1,11 +1,12 @@
 -- Run with: riptide --plugin-test listen
 local function listen() return require("listen") end
 
-local function make_clip()
+-- A clip of the test article: gA, or :listen with mode.
+local function make_clip(mode)
   run("open " .. page("article.html"))
   wait_for("load_finished", { pattern = "plugin-test.localhost" })
   local before = #listen().clips()
-  keys("gA")
+  if mode then run("listen " .. mode) else keys("gA") end
   local ok = pcall(wait_until, function() return #listen().clips() > before end, 8000)
   if not ok then error("no clip: " .. table.concat(messages(), " / ")) end
   return listen().clips()[1]
@@ -48,17 +49,46 @@ describe("listen", function()
     for _, clip in ipairs(listen().clips()) do listen().delete(clip.id) end
   end)
 
-  it("saves a spoken summary of the page's article", function()
+  it("reads the article aloud, paragraph by paragraph", function()
     local clip = make_clip()
+    assert.equals("article", clip.mode)
     assert.equals("Life in the tide pools", clip.title)
-    assert.equals("Tide pools\nTide pools teem with life, says llama3.2.", clip.summary)
+    assert.falsy(clip.summary)
     assert.matches("%.wav$", clip.file, "no ffmpeg in the test config")
-    assert.truthy(math.abs(clip.seconds - 0.5) < 0.01, tostring(clip.seconds))
+    local text = listen().text(clip)
+    assert.equals("Life in the tide pools", text[1].text)
+    assert.truthy(text[1].heading)
+    assert.matches("^Tide pools are small worlds", text[2].text)
+    assert.matches("^When the water comes back", text[#text].text)
+    -- The title, then the four paragraphs; the byline, ad and nav are left out.
+    assert.equals(5, #text)
+    -- Each part is half a second, with 0.4 s between paragraphs.
+    for i, p in ipairs(text) do
+      assert.truthy(math.abs(p.start - (i - 1) * 0.9) < 0.01, i .. ": " .. tostring(p.start))
+    end
+    assert.truthy(math.abs(clip.seconds - (#text * 0.9 - 0.4)) < 0.01, tostring(clip.seconds))
     local file = io.open(listen().dir() .. "/" .. clip.file, "rb")
     assert.truthy(file)
     file:close()
+    assert.falsy(io.open(listen().dir() .. "/" .. clip.id .. ".parts", "rb"))
     assert.equals(0, #listen().pending)
     assert.matches("^listen: ready", last_message())
+  end)
+
+  it("reads a summary with :listen summary", function()
+    local clip = make_clip("summary")
+    assert.equals("summary", clip.mode)
+    assert.equals("Tide pools\nTide pools teem with life, says llama3.2.", clip.summary)
+    local text = listen().text(clip)
+    assert.equals(2, #text)
+    assert.equals("Tide pools Tide pools teem with life, says llama3.2.", text[2].text)
+  end)
+
+  it("drops an LLM's preamble and keeps its paragraphs", function()
+    assert.equals("Agents learn.", listen().clean("Here's a summary of the article in a short script: Agents learn."))
+    local paragraphs = listen().paragraphs("One.\nStill one.\n\nTwo.\n\n\n")
+    assert.equals(2, #paragraphs)
+    assert.equals("One. Still one.", paragraphs[1].text)
   end)
 
   it("lists the clips and plays one", function()
@@ -72,6 +102,7 @@ describe("listen", function()
     pages[#pages]:send("play", { id = clip.id })
     wait_until(function() return listen().loaded ~= nil end, 8000)
     assert.falsy(listen().loaded.error)
+    assert.equals(#listen().text(clip), listen().loaded.timed)
   end)
 
   it("deletes a clip and its file", function()
@@ -83,7 +114,7 @@ describe("listen", function()
   end)
 
   it("says what Ollama said when it fails", function()
-    with({ model = "missing" })
+    with({ read = "summary", model = "missing" })
     run("open " .. page("article.html"))
     wait_for("load_finished", { pattern = "plugin-test.localhost" })
     clear_messages()
@@ -142,13 +173,22 @@ describe("listen", function()
   end)
 
   it("says how to install Ollama when it doesn't answer", function()
-    with({ ollama = "http://down.invalid" })
+    with({ ollama = "http://down.invalid", read = "summary" })
     listen().status = nil
     listen().act("check")
     local ollama = checked("ollama")
     assert.falsy(ollama.ok)
     assert.matches("down.invalid", ollama.detail)
     assert.falsy(listen().status.ready)
+
+    -- Reading articles doesn't need Ollama.
+    with({ ollama = "http://down.invalid" })
+    listen().status = nil
+    listen().act("check")
+    ollama = checked("ollama")
+    assert.truthy(ollama.optional)
+    assert.matches("^only for summaries", ollama.detail)
+    assert.truthy(listen().status.ready)
   end)
 
   it("opens the setup instead when there's no voice", function()

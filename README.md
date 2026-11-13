@@ -28,7 +28,7 @@ them and checks for updates.
 | [flash](flash) | Jump to any text on screen by two of its characters |
 | [reader](reader) | Read a page's article alone, cleanly typeset |
 | [noice](noice) | A cleaner command line, questions, tabs and status bar |
-| [listen](listen) | Hear a spoken summary of the page, from a local LLM and Piper |
+| [listen](listen) | Hear the page's article (or a summary from a local LLM) read aloud by Piper, with its text following along |
 
 ## Writing one
 

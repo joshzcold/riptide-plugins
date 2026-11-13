@@ -1,5 +1,5 @@
 name = "listen"
-description = "Hear a spoken summary of the page, made by a local LLM and Piper, and keep the clips"
+description = "Hear the page's article read aloud by Piper, or a summary from a local LLM, with its text following along"
 riptide = ">=0.20"
 # Readability, to find the article.
 dependencies = ["reader"]
@@ -14,8 +14,15 @@ files = true
 
 [[option]]
 name = "key"
-description = "The key that makes a spoken summary of the page"
+description = "The key that reads the page aloud"
 default = "gA"
+
+[[option]]
+name = "read"
+type = "choice"
+choices = ["article", "summary"]
+default = "article"
+description = "What the key reads: the article itself, or a summary from Ollama (:listen article or :listen summary picks for one page)"
 
 [[option]]
 name = "voice"
@@ -24,7 +31,7 @@ description = "A Piper voice's .onnx file (default: the one downloaded on :liste
 
 [[option]]
 name = "model"
-description = "The Ollama model that writes the summary"
+description = "The Ollama model that writes summaries"
 default = "llama3.2"
 
 [[option]]
@@ -35,7 +42,7 @@ default = "http://localhost:11434"
 [[option]]
 name = "words"
 type = "number"
-description = "About how long the summary is, in words"
+description = "About how long a summary is, in words"
 default = 150
 
 [[option]]
