@@ -20,8 +20,7 @@ default = "gA"
 [[option]]
 name = "voice"
 type = "path"
-description = "A Piper voice's .onnx file, e.g. en_US-lessac-medium.onnx"
-required = true
+description = "A Piper voice's .onnx file (default: the one downloaded on :listen-library)"
 
 [[option]]
 name = "model"

@@ -11,9 +11,38 @@ local function make_clip()
   return listen().clips()[1]
 end
 
+-- The test config's options, with these changed.
+local base
+local function with(changes)
+  local opts = {}
+  for k, v in pairs(base) do opts[k] = v end
+  for k, v in pairs(changes) do opts[k] = v end
+  listen().setup(opts)
+end
+
+local function item(status, id)
+  for _, i in ipairs(status.items) do
+    if i.id == id then return i end
+  end
+end
+
+-- The setup's checks, as the page last got them.
+local function checked(id, pred)
+  wait_until(function()
+    local status = listen().status
+    local i = status and item(status, id)
+    return i and not i.busy and (not pred or pred(i))
+  end, 8000)
+  return item(listen().status, id)
+end
+
 describe("listen", function()
   before_each(function()
+    base = base or listen().options()
+    listen().setup(base)
+    listen().status = nil
     listen().curl = plugin_test.dir .. "/test/bin/fake-curl"
+    os.remove(plugin_test.dir .. "/test/bin/.pulled")
     for _, clip in ipairs(listen().clips()) do listen().delete(clip.id) end
   end)
 
@@ -52,7 +81,7 @@ describe("listen", function()
   end)
 
   it("says what Ollama said when it fails", function()
-    listen().setup({ voice = "v.onnx", model = "missing", piper = plugin_test.dir .. "/test/bin/fake-piper", dir = listen().dir() })
+    with({ model = "missing" })
     run("open " .. page("article.html"))
     wait_for("load_finished", { pattern = "plugin-test.localhost" })
     clear_messages()
@@ -68,5 +97,64 @@ describe("listen", function()
     clear_messages()
     keys("gA")
     wait_until(function() return last_message() == "listen: no article found on this page" end)
+  end)
+
+  it("shows the setup as ready when everything is there", function()
+    listen().setup_shown = nil
+    run("listen-library")
+    wait_until(function() return listen().setup_shown ~= nil end, 8000)
+    assert.equals(0, listen().setup_shown.left)
+    assert.truthy(listen().status.ready)
+    assert.truthy(item(listen().status, "model").ok)
+    assert.falsy(item(listen().status, "ffmpeg").ok)
+    assert.truthy(item(listen().status, "ffmpeg").optional)
+  end)
+
+  it("pulls a model that isn't there", function()
+    with({ model = "qwen3" })
+    listen().status = nil
+    listen().act("check")
+    local model = checked("model")
+    assert.falsy(model.ok)
+    assert.equals("pull", model.action.name)
+    listen().status = nil
+    listen().act("pull")
+    checked("model", function(i) return i.ok end)
+    assert.truthy(listen().status.ready)
+  end)
+
+  it("downloads a voice when none is set", function()
+    with({ voice = false })
+    listen().status = nil
+    listen().act("check")
+    local voice = checked("voice")
+    assert.falsy(voice.ok)
+    assert.equals("en_US-lessac-medium", voice.action.choices[1].value)
+    listen().status = nil
+    listen().act("voice", { choice = "en_GB-alba-medium" })
+    checked("voice", function(i) return i.ok end)
+    local path = listen().voices_dir() .. "/en_GB-alba-medium.onnx"
+    assert.equals(path, listen().voice())
+    assert.truthy(io.open(path .. ".json", "rb"))
+    assert.falsy(io.open(path .. ".part", "rb"))
+  end)
+
+  it("says how to install Ollama when it doesn't answer", function()
+    with({ ollama = "http://down.invalid" })
+    listen().status = nil
+    listen().act("check")
+    local ollama = checked("ollama")
+    assert.falsy(ollama.ok)
+    assert.matches("down.invalid", ollama.detail)
+    assert.falsy(listen().status.ready)
+  end)
+
+  it("opens the setup instead when there's no voice", function()
+    with({ voice = plugin_test.dir .. "/test/voice/none.onnx" })
+    run("open " .. page("article.html"))
+    wait_for("load_finished", { pattern = "plugin-test.localhost" })
+    keys("gA")
+    wait_until(function() return rt.url():match("^riptide://listen%.plugin/") end, 8000)
+    assert.matches("isn't there", checked("voice").detail)
   end)
 end)

@@ -5,6 +5,8 @@
   --link: #2b5d9b;
   --rule: #e3ddd0;
   --card: #f4efe4;
+  --ok: #2f7a3e;
+  --bad: #b3402f;
   color-scheme: light dark;
 }
 
@@ -16,7 +18,13 @@
     --link: #8ab4e8;
     --rule: #3a3833;
     --card: #262522;
+    --ok: #7cc48b;
+    --bad: #ec8a78;
   }
+}
+
+[hidden] {
+  display: none !important;
 }
 
 html {
@@ -130,4 +138,76 @@ details {
 summary {
   cursor: pointer;
   color: var(--muted);
+}
+
+#setup {
+  margin: 0 0 1.5em;
+  padding: 0.6em 0.9em;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: 1em;
+}
+
+#setup > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+#recheck {
+  font-weight: normal;
+  font-size: 0.9em;
+  background: var(--bg);
+}
+
+.check {
+  display: flex;
+  gap: 0.75em;
+  padding: 0.7em 0 0.2em;
+  border-top: 1px solid var(--rule);
+  margin-top: 0.6em;
+}
+
+.check p {
+  margin: 0 0 0.3em;
+}
+
+.check .body {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mark {
+  width: 1.2em;
+  text-align: center;
+  font-weight: 700;
+}
+
+.ok .mark { color: var(--ok); }
+.missing .mark, .error { color: var(--bad); }
+.optional .mark, .busy .mark { color: var(--muted); }
+
+pre {
+  margin: 0.3em 0;
+  padding: 0.4em 0.6em;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow-x: auto;
+  user-select: all;
+}
+
+.do {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin: 0.3em 0;
+}
+
+.do button, .do select {
+  background: var(--bg);
 }

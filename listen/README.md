@@ -16,18 +16,32 @@ the clips are saved in `~/.local/share/riptide/listen` (or the `dir` option).
 
 ## Setup
 
-```sh
-ollama pull llama3.2
-pipx install piper-tts
+```lua
+rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen" })
 ```
 
-Then pick a voice from [piper-voices](https://huggingface.co/rhasspy/piper-voices)
-and save its `.onnx` and `.onnx.json` side by side, e.g. in `~/.local/share/piper`.
+Then open `:listen-library`. Its Setup section checks for Ollama, the model,
+Piper, a voice and ffmpeg, and for each one that's missing either does it for
+you or shows the command for your system:
+
+- **Ollama**: the install command, or how to start it if it's installed but
+  not answering.
+- **The model**: a button that pulls it through Ollama.
+- **Piper**: a button that runs `pipx install piper-tts`, or how to install
+  pipx first.
+- **A voice**: pick one of a few English voices and download it (about 60 MB,
+  from [piper-voices](https://huggingface.co/rhasspy/piper-voices)) into
+  `voices/` beside the clips. Downloads only happen when you press the button.
+- **ffmpeg** (optional): the install command.
+
+Pressing `gA` before Piper and a voice are ready opens the library too.
+
+Options, all optional:
 
 ```lua
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen", opts = {
-  voice = os.getenv("HOME") .. "/.local/share/piper/en_US-lessac-medium.onnx",
-  model = "llama3.2",              -- any model you've pulled in Ollama
+  voice = os.getenv("HOME") .. "/.local/share/piper/en_US-lessac-medium.onnx", -- another voice
+  model = "llama3.2",              -- any model in Ollama
   words = 150,                     -- about how long the summary is
   -- ollama = "http://localhost:11434",
   -- key = "gA",                   -- false for none
@@ -35,8 +49,8 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen",
 ```
 
 With [ffmpeg](https://ffmpeg.org) installed, clips are saved as Opus, about a
-tenth the size of the WAV Piper writes. `:pack-health` checks for curl, piper,
-the voice and ffmpeg.
+tenth the size of the WAV Piper writes. `:pack-health` checks for piper, the
+voice and ffmpeg too.
 
 It brings [reader](../reader), for Readability. It asks to read the pages you
 use it on, to run curl, piper and ffmpeg, and to read and delete the clips it

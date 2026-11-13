@@ -5,7 +5,7 @@ rt.pack.add({
   dir = plugin_test.dir,
   name = "listen",
   opts = {
-    voice = "test-voice.onnx",
+    voice = plugin_test.dir .. "/test/voice/test-voice.onnx",
     piper = plugin_test.dir .. "/test/bin/fake-piper",
     ffmpeg = "no-such-ffmpeg",
     dir = dir,

@@ -10,6 +10,7 @@ let clips = [];
 let pending = [];
 let playing = null;
 let url = null;
+let ready = true;
 
 function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props);
@@ -57,6 +58,60 @@ function row(clip) {
   );
 }
 
+function empty() {
+  return ready ? "No clips yet. Press gA on a page to make one." : "No clips yet. Finish the setup above, then press gA on a page.";
+}
+
+function link(target) {
+  const a = el("a", { href: target.url, textContent: target.text });
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    send("open", { url: target.url });
+  });
+  return a;
+}
+
+function check(item) {
+  const mark = item.busy ? "…" : item.ok ? "✓" : item.optional ? "–" : "✗";
+  const state = item.busy ? "busy" : item.ok ? "ok" : item.optional ? "optional" : "missing";
+  const body = el("div", { className: "body" },
+    el("p", {}, el("strong", { textContent: item.name }), ` ${item.busy ? item.busy_text || "Working…" : item.detail}`));
+  if (item.error && !item.busy) body.append(el("p", { className: "error", textContent: item.error }));
+  if (!item.ok && !item.busy) {
+    for (const command of item.commands || []) body.append(el("pre", {}, el("code", { textContent: command })));
+    if (item.action) {
+      const row = el("div", { className: "do" });
+      let choice = null;
+      if (item.action.choices) {
+        choice = el("select", { title: item.name },
+          ...item.action.choices.map((c) => el("option", { value: c.value, textContent: c.label })));
+        row.append(choice);
+      }
+      const button = el("button", { textContent: item.action.label });
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        send("setup", { action: item.action.name, choice: choice?.value });
+      });
+      row.append(button);
+      body.append(row);
+    }
+    if (item.link) body.append(el("p", { className: "meta" }, link(item.link)));
+  }
+  return el("li", { className: `check ${state}` }, el("span", { className: "mark", textContent: mark }), body);
+}
+
+function status(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const left = items.filter((i) => !i.ok && !i.optional).length;
+  ready = Boolean(data.ready);
+  $("setup").hidden = false;
+  $("setup-title").textContent = left ? `Setup: ${left} ${left === 1 ? "step" : "steps"} left` : "Setup: ready";
+  if (left) $("setup").open = true;
+  $("checks").replaceChildren(...items.map(check));
+  render();
+  send("setup_shown", { left, busy: items.filter((i) => i.busy).length });
+}
+
 function start(clip) {
   playing = clip.id;
   $("now").textContent = clip.title;
@@ -77,7 +132,7 @@ function render() {
   $("clips").replaceChildren(
     ...(shown.length
       ? shown.map(row)
-      : [el("li", { className: "muted", textContent: clips.length ? "No clips match." : "No clips yet. Press gA on a page to make one." })]),
+      : [el("li", { className: "muted", textContent: clips.length ? "No clips match." : empty() })]),
   );
   send("shown", { clips: shown.length, pending: pending.length });
 }
@@ -100,6 +155,10 @@ audio.addEventListener("loadedmetadata", () => send("loaded", { id: playing, dur
 audio.addEventListener("error", () => send("loaded", { id: playing, error: audio.error?.message || "can't play this clip" }));
 $("speed").addEventListener("change", () => { audio.playbackRate = Number($("speed").value); });
 $("filter").addEventListener("input", render);
+$("recheck").addEventListener("click", (e) => {
+  e.preventDefault();
+  send("setup", { action: "check" });
+});
 
 addEventListener("rtmessage", (e) => {
   const { name, data } = e.detail;
@@ -111,6 +170,8 @@ addEventListener("rtmessage", (e) => {
   } else if (name === "play") {
     const clip = clips.find((c) => c.id === data.id);
     if (clip) start(clip);
+  } else if (name === "status") {
+    status(data);
   } else if (name === "audio") {
     play(data);
   }

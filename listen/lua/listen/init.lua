@@ -64,11 +64,51 @@ local function refresh()
   for _, page in ipairs(libraries) do pcall(page.send, page, "clips", payload) end
 end
 
+-- A program's path: the option if it's set, else on PATH, else in
+-- ~/.local/bin, where pipx puts piper even when that isn't on riptide's PATH.
 local function program(name)
   local given = opts[name]
-  if given and given ~= "" then return given end
-  return name
+  if given and given ~= "" then return rt.which(given) end
+  local found = rt.which(name)
+  if found then return found end
+  local home = os.getenv("HOME")
+  local local_bin = home and (home .. "/.local/bin/" .. name)
+  local f = local_bin and io.open(local_bin, "rb")
+  if f then
+    f:close()
+    return local_bin
+  end
 end
+
+local function exists(path)
+  local f = path and path ~= "" and io.open(path, "rb")
+  if f then f:close() end
+  return f and true or false
+end
+
+-- Voices the setup can download, from rhasspy/piper-voices.
+M.VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+M.VOICES = {
+  { name = "en_US-lessac-medium", path = "en/en_US/lessac/medium", label = "Lessac, US English" },
+  { name = "en_US-amy-medium", path = "en/en_US/amy/medium", label = "Amy, US English" },
+  { name = "en_US-ryan-high", path = "en/en_US/ryan/high", label = "Ryan, US English, clearer but slower" },
+  { name = "en_GB-alba-medium", path = "en/en_GB/alba/medium", label = "Alba, British English" },
+}
+
+function M.options() return opts end
+
+function M.voices_dir() return M.dir() .. "/voices" end
+
+-- The voice to read with: the voice option, else the one the setup downloaded.
+function M.voice()
+  if opts.voice and opts.voice ~= "" then return opts.voice end
+  local saved = store.get("voice")
+  if exists(saved) then return saved end
+end
+
+local function model() return opts.model or "llama3.2" end
+
+local function endpoint() return (opts.ollama or "http://localhost:11434"):gsub("/+$", "") end
 
 -- The LLM's answer as plain sentences for Piper: no reasoning, no markdown.
 function M.clean(text)
@@ -78,16 +118,16 @@ end
 
 function M.summarize(article, callback)
   local body = rt.json.encode({
-    model = opts.model or "llama3.2",
+    model = model(),
     prompt = PROMPT:format(tonumber(opts.words) or 150, article.title or "", article.text),
     stream = false,
     -- Ollama's default context would cut a long article short without saying so.
     options = { num_ctx = 8192 },
   })
-  local endpoint = (opts.ollama or "http://localhost:11434"):gsub("/+$", "")
+  local base = endpoint()
   local argv = {
     M.curl, "-sS", "--fail-with-body", "--max-time", "600",
-    "-H", "Content-Type: application/json", "--data-binary", "@-", endpoint .. "/api/generate",
+    "-H", "Content-Type: application/json", "--data-binary", "@-", base .. "/api/generate",
   }
   rt.spawn(argv, { stdin = body }, function(r)
     if r.error then return callback(nil, "couldn't run curl: " .. r.error) end
@@ -96,7 +136,8 @@ function M.summarize(article, callback)
       return callback(nil, "Ollama: " .. tostring(answer.error))
     end
     if r.code ~= 0 or not ok or type(answer) ~= "table" then
-      return callback(nil, "no answer from Ollama at " .. endpoint .. ": " .. trim(r.stderr ~= "" and r.stderr or r.stdout))
+      return callback(nil, "no answer from Ollama at " .. base .. " (:listen-library helps set it up): "
+        .. trim(r.stderr ~= "" and r.stderr or r.stdout))
     end
     local text = M.clean(answer.response)
     if text == "" then return callback(nil, "Ollama's summary was empty") end
@@ -122,12 +163,12 @@ function M.speak(text, id, callback)
   local wav = dir .. "/" .. id .. ".wav"
   rt.spawn({ "mkdir", "-p", dir }, function(made)
     if made.code ~= 0 then return callback(nil, nil, "couldn't make " .. dir .. ": " .. trim(made.stderr)) end
-    rt.spawn({ program("piper"), "--model", opts.voice, "--output_file", wav }, { stdin = text }, function(r)
+    rt.spawn({ program("piper") or "piper", "--model", M.voice(), "--output_file", wav }, { stdin = text }, function(r)
       local seconds = wav_seconds(wav)
       if r.error or r.code ~= 0 or not seconds then
         return callback(nil, nil, "piper failed: " .. trim(r.error or r.stderr))
       end
-      local ffmpeg = rt.which(program("ffmpeg"))
+      local ffmpeg = program("ffmpeg")
       if not ffmpeg then return callback(id .. ".wav", seconds) end
       local ogg = dir .. "/" .. id .. ".ogg"
       local argv = { ffmpeg, "-y", "-loglevel", "error", "-i", wav, "-c:a", "libopus", "-b:a", "32k", ogg }
@@ -147,8 +188,9 @@ local function done(job)
 end
 
 function M.make()
-  if not opts.voice or opts.voice == "" then
-    return notify("set the voice option to a Piper voice (.onnx) first", "error")
+  if not program("piper") or not exists(M.voice()) then
+    notify("piper and a voice aren't set up yet; see the setup on this page", "error")
+    return M.library()
   end
   local url = rt.url()
   if not url:match("^https?://") and not url:match("^file://") then
@@ -243,6 +285,11 @@ function M.library()
     on_message = function(name, data, page)
       if name == "ready" then
         page:send("clips", { clips = M.clips(), pending = M.pending })
+        M.check(function(status) pcall(page.send, page, "status", status) end)
+      elseif name == "setup" then
+        M.act(data.action, data)
+      elseif name == "setup_shown" then
+        M.setup_shown = data
       elseif name == "play" then
         M.play(data.id, page)
       elseif name == "delete" then
@@ -261,19 +308,270 @@ function M.library()
   return page
 end
 
-function M.health(report)
-  if rt.which(M.curl) then report.ok("curl found") else report.error("curl isn't installed; it reaches Ollama") end
-  if rt.which(program("piper")) then
-    report.ok("piper found")
-  else
-    report.error("piper isn't installed (pipx install piper-tts), or set the piper option")
+-- Setup: what's ready, how to install what isn't, and the steps the page can
+-- take itself (pull the model, download a voice, install piper with pipx).
+
+-- Steps running now, and the last failure of each: { pull = true }, { pull = "…" }.
+M.busy = {}
+M.failed = {}
+
+-- The system's package manager family: debian, fedora, arch, suse, macos, windows or linux.
+function M.system()
+  if rt.platform ~= "linux" then return rt.platform end
+  local f = io.open("/etc/os-release", "rb")
+  if not f then return "linux" end
+  local text = "\n" .. f:read("a")
+  f:close()
+  local ids = (text:match('\nID="?([^"\n]+)') or "") .. " " .. (text:match('\nID_LIKE="?([^"\n]+)') or "")
+  for _, family in ipairs({ "debian", "ubuntu", "fedora", "rhel", "arch", "suse" }) do
+    if ids:find(family, 1, true) then
+      return ({ ubuntu = "debian", rhel = "fedora" })[family] or family
+    end
   end
-  local voice = opts.voice and opts.voice ~= "" and io.open(opts.voice, "rb")
-  if voice then voice:close() elseif opts.voice then report.warn("no voice file at " .. opts.voice) end
-  if rt.which(program("ffmpeg")) then
-    report.ok("ffmpeg found; clips are saved as Opus")
+  return "linux"
+end
+
+local INSTALL = {
+  debian = "sudo apt install %s",
+  fedora = "sudo dnf install %s",
+  arch = "sudo pacman -S %s",
+  suse = "sudo zypper install %s",
+  macos = "brew install %s",
+  windows = "winget install %s",
+}
+
+-- Package names where they differ from the program's.
+local PACKAGES = {
+  pipx = { arch = "python-pipx", suse = "python3-pipx", windows = "pipx" },
+  ffmpeg = { fedora = "ffmpeg-free", windows = "Gyan.FFmpeg" },
+  curl = { windows = "cURL.cURL" },
+}
+
+local function install(name)
+  local system = M.system()
+  local command = INSTALL[system]
+  if not command then return nil end
+  return command:format((PACKAGES[name] or {})[system] or name)
+end
+
+-- The commands given, without the ones there's no install command for here.
+local function commands(...)
+  local list = {}
+  for i = 1, select("#", ...) do
+    local c = select(i, ...)
+    if c then table.insert(list, c) end
+  end
+  return list
+end
+
+local function ollama_install()
+  local system = M.system()
+  if system == "macos" then return "brew install ollama" end
+  if system == "windows" then return "winget install Ollama.Ollama" end
+  if system == "arch" then return "sudo pacman -S ollama" end
+  return "curl -fsSL https://ollama.com/install.sh | sh"
+end
+
+local function failed(id, item)
+  if M.failed[id] then item.error = M.failed[id] end
+  if M.busy[id] then item.busy = true end
+  return item
+end
+
+-- The checks that don't need Ollama to answer, in the order the page lists them.
+function M.local_checks()
+  local items = {}
+  local piper = program("piper")
+  if piper then
+    table.insert(items, { id = "piper", name = "Piper", ok = true, detail = piper })
   else
-    report.warn("ffmpeg isn't installed; clips are saved as WAV, about 10 times larger")
+    local item = { id = "piper", name = "Piper", ok = false, detail = "reads the summary aloud; it isn't installed" }
+    if rt.which("pipx") then
+      item.action = { name = "piper", label = "Install with pipx" }
+      item.busy_text = "Installing piper-tts…"
+    else
+      item.detail = item.detail .. ". Install pipx, then piper"
+      item.commands = commands(install("pipx"), "pipx ensurepath", "pipx install piper-tts")
+    end
+    table.insert(items, failed("piper", item))
+  end
+
+  local voice = M.voice()
+  if voice and exists(voice) then
+    table.insert(items, { id = "voice", name = "Voice", ok = true, detail = voice })
+  elseif voice then
+    table.insert(items, { id = "voice", name = "Voice", ok = false,
+      detail = "the voice option names " .. voice .. ", which isn't there. Fix the path in your config, or remove the option and download one here" })
+  else
+    local choices = {}
+    for _, v in ipairs(M.VOICES) do table.insert(choices, { value = v.name, label = v.label }) end
+    table.insert(items, failed("voice", { id = "voice", name = "Voice", ok = false,
+      detail = "the Piper voice to read with; about 60 MB",
+      action = { name = "voice", label = "Download", choices = choices },
+      busy_text = "Downloading the voice…",
+      link = { url = "https://rhasspy.github.io/piper-samples/", text = "Hear samples of every voice" } }))
+  end
+
+  local ffmpeg = program("ffmpeg")
+  if ffmpeg then
+    table.insert(items, { id = "ffmpeg", name = "ffmpeg", ok = true, optional = true, detail = "clips are saved as Opus" })
+  else
+    table.insert(items, { id = "ffmpeg", name = "ffmpeg", ok = false, optional = true,
+      detail = "optional: clips are saved as WAV, about 10 times larger", commands = commands(install("ffmpeg")),
+      link = { url = "https://ffmpeg.org/download.html", text = "ffmpeg.org/download" } })
+  end
+  return items
+end
+
+-- Every check, Ollama's included, handed to callback as { items, ready }.
+function M.check(callback)
+  local items = M.local_checks()
+  local function finish(ollama)
+    for i = #ollama, 1, -1 do table.insert(items, 1, ollama[i]) end
+    local ready = true
+    for _, item in ipairs(items) do
+      if not item.ok and not item.optional then ready = false end
+    end
+    M.status = { items = items, ready = ready }
+    callback(M.status)
+  end
+
+  local curl = rt.which(M.curl)
+  if not curl then
+    return finish({ { id = "ollama", name = "Ollama", ok = false,
+      detail = "curl, which reaches Ollama, isn't installed", commands = commands(install("curl")) } })
+  end
+  local base = endpoint()
+  rt.spawn({ M.curl, "-sS", "--max-time", "3", base .. "/api/tags" }, function(r)
+    local ok, tags = pcall(rt.json.decode, r.stdout or "")
+    if r.code ~= 0 or not ok or type(tags) ~= "table" then
+      local item = { id = "ollama", name = "Ollama", ok = false }
+      if rt.which("ollama") then
+        item.detail = "installed, but not answering at " .. base .. ". Start it"
+        item.commands = rt.platform == "linux" and { "systemctl start ollama", "ollama serve" } or { "ollama serve" }
+      elseif opts.ollama and opts.ollama ~= "" then
+        item.detail = "nothing answers at " .. base .. ", the ollama option"
+      else
+        item.detail = "writes the summaries, on your computer; it isn't installed"
+        item.commands = { ollama_install() }
+        item.link = { url = "https://ollama.com/download", text = "ollama.com/download" }
+      end
+      return finish({ item, { id = "model", name = "Model " .. model(), ok = false, detail = "needs Ollama" } })
+    end
+    local name = model()
+    local have = false
+    for _, m in ipairs(tags.models or {}) do
+      if m.name == name or m.name == name .. ":latest" or m.model == name then have = true end
+    end
+    local item = { id = "model", name = "Model " .. name, ok = have }
+    if have then
+      item.detail = "pulled"
+    else
+      item.detail = "not pulled yet; it's a few GB"
+      item.action = { name = "pull", label = "Pull " .. name }
+      item.busy_text = "Pulling " .. name .. "; this takes a while…"
+    end
+    finish({ { id = "ollama", name = "Ollama", ok = true, detail = base }, failed("pull", item) })
+  end)
+end
+
+local function broadcast()
+  M.check(function(status)
+    for _, page in ipairs(libraries) do pcall(page.send, page, "status", status) end
+  end)
+end
+
+-- Runs a step, then checks everything again.
+local function step(id, work)
+  if M.busy[id] then return end
+  M.busy[id] = true
+  M.failed[id] = nil
+  broadcast()
+  work(function(err)
+    M.busy[id] = nil
+    M.failed[id] = err
+    if err then notify(err, "error") end
+    broadcast()
+  end)
+end
+
+local function pull(done)
+  local body = rt.json.encode({ model = model(), stream = false })
+  local argv = { M.curl, "-sS", "--fail-with-body", "-H", "Content-Type: application/json",
+    "--data-binary", "@-", endpoint() .. "/api/pull" }
+  rt.spawn(argv, { stdin = body }, function(r)
+    local ok, answer = pcall(rt.json.decode, r.stdout or "")
+    if ok and type(answer) == "table" and answer.error then return done("Ollama: " .. tostring(answer.error)) end
+    if r.code ~= 0 then return done("couldn't pull " .. model() .. ": " .. trim(r.stderr ~= "" and r.stderr or r.stdout)) end
+    notify("pulled " .. model())
+    done()
+  end)
+end
+
+local function download_voice(name, done)
+  local voice
+  for _, v in ipairs(M.VOICES) do
+    if v.name == name then voice = v end
+  end
+  if not voice then return done("there's no voice " .. tostring(name)) end
+  local dir = M.voices_dir()
+  local onnx = dir .. "/" .. voice.name .. ".onnx"
+  local function fetch(path, after)
+    local url = M.VOICE_BASE .. voice.path .. "/" .. voice.name .. path:match("%.onnx.*$")
+    rt.spawn({ M.curl, "-fsSL", "--retry", "2", "-o", path .. ".part", url }, function(r)
+      if r.code ~= 0 then
+        os.remove(path .. ".part")
+        return done("couldn't download " .. voice.name .. ": " .. trim(r.error or r.stderr))
+      end
+      os.remove(path)
+      os.rename(path .. ".part", path)
+      after()
+    end)
+  end
+  rt.spawn({ "mkdir", "-p", dir }, function(made)
+    if made.code ~= 0 then return done("couldn't make " .. dir .. ": " .. trim(made.stderr)) end
+    fetch(onnx .. ".json", function()
+      fetch(onnx, function()
+        store.set("voice", onnx)
+        notify("downloaded the voice " .. voice.name)
+        done()
+      end)
+    end)
+  end)
+end
+
+local function install_piper(done)
+  local pipx = rt.which("pipx")
+  if not pipx then return done("pipx isn't installed") end
+  rt.spawn({ pipx, "install", "piper-tts" }, function(r)
+    if r.code ~= 0 then return done("pipx install piper-tts failed: " .. trim(r.error or r.stderr)) end
+    notify("installed piper")
+    done()
+  end)
+end
+
+-- A step the page asked for: "pull", "voice" (with data.choice) or "piper".
+function M.act(name, data)
+  if name == "pull" then
+    step("pull", pull)
+  elseif name == "voice" then
+    step("voice", function(done) download_voice(data and data.choice or M.VOICES[1].name, done) end)
+  elseif name == "piper" then
+    step("piper", install_piper)
+  elseif name == "check" then
+    broadcast()
+  end
+end
+
+function M.health(report)
+  for _, item in ipairs(M.local_checks()) do
+    if item.ok then
+      report.ok(item.name .. ": " .. item.detail)
+    elseif item.optional then
+      report.warn(item.name .. ": " .. item.detail)
+    else
+      report.error(item.name .. ": " .. item.detail .. " (:listen-library helps set it up)")
+    end
   end
 end
 

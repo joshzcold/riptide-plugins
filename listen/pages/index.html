@@ -11,6 +11,10 @@
       <h1>Listen</h1>
       <input id="filter" type="search" placeholder="Filter" aria-label="Filter clips">
     </header>
+    <details id="setup" hidden>
+      <summary><span id="setup-title">Setup</span> <button id="recheck" type="button">Check again</button></summary>
+      <ul id="checks"></ul>
+    </details>
     <section id="player" hidden>
       <p id="now"></p>
       <audio id="audio" controls></audio>
