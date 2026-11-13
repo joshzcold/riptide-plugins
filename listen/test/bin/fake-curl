@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # curl as listen runs it, against a fake Ollama with llama3.2 pulled: a summary
 # naming the model, Ollama's error for the model "missing", pulls (kept in
-# .pulled beside this file), and voice downloads. down.invalid doesn't answer.
+# .pulled beside this file), voice downloads and a small voices.json. down.invalid doesn't answer.
 import json, os, sys
 
 args = sys.argv[1:]
@@ -18,9 +18,28 @@ def pulled():
 if "down.invalid" in url:
     print("curl: (7) Failed to connect to down.invalid", file=sys.stderr)
     sys.exit(7)
+def voice(lang, country, name, quality, speakers=1):
+    family, code = lang.split("_")[0], lang
+    key = "%s-%s-%s" % (code, name, quality)
+    base = "%s/%s/%s/%s/%s" % (family, code, name, quality, key)
+    return key, {
+        "key": key, "name": name, "quality": quality, "num_speakers": speakers,
+        "language": {"code": code, "name_english": "English" if family == "en" else "German", "country_english": country},
+        "files": {base + ".onnx": {"size_bytes": 63221984}, base + ".onnx.json": {"size_bytes": 5465}},
+    }
+
 if "-o" in args:
     with open(args[args.index("-o") + 1], "w") as f:
-        f.write("fake " + url.rsplit("/", 1)[-1])
+        if url.endswith("/voices.json"):
+            # A few of piper-voices' catalog.
+            json.dump(dict([
+                voice("en_US", "United States", "amy", "medium"),
+                voice("en_GB", "Great Britain", "alba", "medium"),
+                voice("de_DE", "Germany", "thorsten", "high"),
+                voice("en_US", "United States", "libritts_r", "medium", 904),
+            ]), f)
+        else:
+            f.write("fake " + url.rsplit("/", 1)[-1])
     sys.exit(0)
 if url.endswith("/api/tags"):
     print(json.dumps({"models": [{"name": m, "model": m} for m in pulled()]}))

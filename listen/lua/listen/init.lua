@@ -122,18 +122,131 @@ local function exists(path)
   return f and true or false
 end
 
--- Voices the setup can download, from rhasspy/piper-voices.
+-- Voices the setup can download, from rhasspy/piper-voices: its voices.json
+-- catalog, else these few when that can't be fetched.
 M.VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
 M.VOICES = {
-  { name = "en_US-lessac-medium", path = "en/en_US/lessac/medium", label = "Lessac, US English" },
-  { name = "en_US-amy-medium", path = "en/en_US/amy/medium", label = "Amy, US English" },
-  { name = "en_US-ryan-high", path = "en/en_US/ryan/high", label = "Ryan, US English, clearer but slower" },
-  { name = "en_GB-alba-medium", path = "en/en_GB/alba/medium", label = "Alba, British English" },
+  { key = "en_US-lessac-medium", name = "Lessac", lang = "en_US", language = "English (United States)",
+    quality = "medium", onnx = "en/en_US/lessac/medium/en_US-lessac-medium.onnx" },
+  { key = "en_US-amy-medium", name = "Amy", lang = "en_US", language = "English (United States)",
+    quality = "medium", onnx = "en/en_US/amy/medium/en_US-amy-medium.onnx" },
+  { key = "en_US-ryan-high", name = "Ryan", lang = "en_US", language = "English (United States)",
+    quality = "high", onnx = "en/en_US/ryan/high/en_US-ryan-high.onnx" },
+  { key = "en_GB-alba-medium", name = "Alba", lang = "en_GB", language = "English (United Kingdom)",
+    quality = "medium", onnx = "en/en_GB/alba/medium/en_GB-alba-medium.onnx" },
 }
+
+-- How long the downloaded catalog is used before it's fetched again.
+local CATALOG_DAYS = 7
+local QUALITY = { x_low = 1, low = 2, medium = 3, high = 4 }
+local catalog
 
 function M.options() return opts end
 
 function M.voices_dir() return M.dir() .. "/voices" end
+
+local function catalog_path() return M.voices_dir() .. "/voices.json" end
+
+-- voices.json's voices, as M.VOICES lists them, by language, name and quality;
+-- nil if it isn't one.
+function M.parse_catalog(text)
+  local ok, data = pcall(rt.json.decode, text or "")
+  if not ok or type(data) ~= "table" then return nil end
+  local list = {}
+  for key, v in pairs(data) do
+    local onnx, size
+    for path, file in pairs(type(v) == "table" and v.files or {}) do
+      if path:match("%.onnx$") then onnx, size = path, type(file) == "table" and file.size_bytes or nil end
+    end
+    local lang = type(v.language) == "table" and v.language or {}
+    -- Keys become file names and paths go in URLs, so only plain ones.
+    if onnx and type(key) == "string" and key:match("^[%w_%-\128-\255]+$") and not onnx:find("..", 1, true) then
+      local name = tostring(v.name or key):gsub("_", " "):gsub("^%l", string.upper)
+      local country = lang.country_english and (" (" .. lang.country_english .. ")") or ""
+      table.insert(list, {
+        key = key,
+        name = name,
+        lang = lang.code or "",
+        language = (lang.name_english or lang.code or "Other") .. country,
+        quality = v.quality,
+        speakers = v.num_speakers,
+        onnx = onnx,
+        size = size,
+      })
+    end
+  end
+  table.sort(list, function(a, b)
+    if a.language ~= b.language then return a.language < b.language end
+    if a.name ~= b.name then return a.name < b.name end
+    return (QUALITY[a.quality] or 0) < (QUALITY[b.quality] or 0)
+  end)
+  if #list > 0 then return list end
+end
+
+-- The voices on offer: the downloaded catalog, else M.VOICES.
+function M.catalog()
+  if catalog then return catalog end
+  local f = io.open(catalog_path(), "rb")
+  if f then
+    catalog = M.parse_catalog(f:read("a"))
+    f:close()
+  end
+  return catalog or M.VOICES
+end
+
+function M.forget_catalog()
+  catalog = nil
+  M.catalog_error = nil
+  store.set("catalog_at", nil)
+  os.remove(catalog_path())
+end
+
+-- Fetches the catalog when there's none or it's a week old, then callback().
+local function refresh_catalog(callback)
+  if exists(catalog_path()) and (store.get("catalog_at") or 0) > os.time() - CATALOG_DAYS * 86400 then
+    return callback()
+  end
+  local path = catalog_path()
+  rt.spawn({ "mkdir", "-p", M.voices_dir() }, function()
+    rt.spawn({ M.curl, "-fsSL", "--max-time", "20", "-o", path .. ".part", M.VOICE_BASE .. "voices.json" }, function(r)
+      local f = r.code == 0 and io.open(path .. ".part", "rb")
+      local list = f and M.parse_catalog(f:read("a"))
+      if f then f:close() end
+      if list then
+        os.remove(path)
+        os.rename(path .. ".part", path)
+        catalog = list
+        M.catalog_error = nil
+        store.set("catalog_at", os.time())
+      else
+        os.remove(path .. ".part")
+        M.catalog_error = "couldn't fetch the list of voices: " .. trim(r.error or r.stderr)
+      end
+      callback()
+    end)
+  end)
+end
+
+local function find_voice(key)
+  for _, list in ipairs({ M.catalog(), M.VOICES }) do
+    for _, v in ipairs(list) do
+      if v.key == key then return v end
+    end
+  end
+end
+
+local function voice_label(v) return v.name .. ", " .. v.language .. ", " .. (v.quality or "") end
+
+-- The language to show first: the voice's in use, else the system's ($LANG).
+local function home_language(list)
+  local lang = (os.getenv("LANG") or ""):match("^(%a+_%a+)") or "en_US"
+  for _, v in ipairs(list) do
+    if v.lang == lang then return v.language end
+  end
+  for _, v in ipairs(list) do
+    if v.lang == "en_US" then return v.language end
+  end
+end
 
 -- The voice to read with: the voice option, else the one the setup downloaded.
 function M.voice()
@@ -629,19 +742,50 @@ function M.local_checks()
   end
 
   local voice = M.voice()
-  if voice and exists(voice) then
-    table.insert(items, { id = "voice", name = "Voice", ok = true, detail = voice })
-  elseif voice then
+  local configured = opts.voice and opts.voice ~= ""
+  if configured and exists(voice) then
+    table.insert(items, { id = "voice", name = "Voice", ok = true,
+      detail = voice .. ", from the voice option in your config; remove it to pick one here" })
+  elseif configured then
     table.insert(items, { id = "voice", name = "Voice", ok = false,
-      detail = "the voice option names " .. voice .. ", which isn't there. Fix the path in your config, or remove the option and download one here" })
+      detail = "the voice option names " .. voice .. ", which isn't there. Fix the path in your config, or remove the option and pick one here" })
   else
-    local choices = {}
-    for _, v in ipairs(M.VOICES) do table.insert(choices, { value = v.name, label = v.label }) end
-    table.insert(items, failed("voice", { id = "voice", name = "Voice", ok = false,
-      detail = "the Piper voice to read with; about 60 MB",
-      action = { name = "voice", label = "Download", choices = choices },
+    -- Pick from the voices on offer, by language; switching to a downloaded one is instant.
+    local list = M.catalog()
+    local current, choices = nil, {}
+    for _, v in ipairs(list) do
+      local path = M.voices_dir() .. "/" .. v.key .. ".onnx"
+      local have = exists(path) and exists(path .. ".json")
+      if voice == path then current = v end
+      local speakers = (v.speakers or 1) > 1 and (" · " .. v.speakers .. " speakers, reads with the first") or ""
+      local size = v.size and string.format(" (%d MB)", math.floor(v.size / 1e6 + 0.5)) or ""
+      table.insert(choices, {
+        value = v.key,
+        group = v.language,
+        label = v.name .. " · " .. (v.quality or "") .. speakers .. (have and " · downloaded" or ""),
+        button = have and "Use" or ("Download and use" .. size),
+      })
+    end
+    local item = failed("voice", {
+      id = "voice",
+      name = "Voice",
+      ok = voice ~= nil,
+      detail = current and voice_label(current) or voice or "the Piper voice to read with",
+      action = {
+        name = "voice",
+        label = "Use",
+        choices = choices,
+        selected = current and current.key,
+        group = current and current.language or home_language(list),
+        keep = true,
+      },
       busy_text = "Downloading the voice…",
-      link = { url = "https://rhasspy.github.io/piper-samples/", text = "Hear samples of every voice" } }))
+      link = { url = "https://rhasspy.github.io/piper-samples/", text = "Hear samples of every voice" },
+    })
+    if not item.error and list == M.VOICES and M.catalog_error then
+      item.error = M.catalog_error .. "; showing a few"
+    end
+    table.insert(items, item)
   end
 
   local ffmpeg = program("ffmpeg")
@@ -657,6 +801,10 @@ end
 
 -- Every check, Ollama's included, handed to callback as { items, ready }.
 function M.check(callback)
+  refresh_catalog(function() M.check_now(callback) end)
+end
+
+function M.check_now(callback)
   local items = M.local_checks()
   local function finish(ollama)
     -- Reading articles needs no LLM; only summaries do.
@@ -749,20 +897,23 @@ local function pull(done)
   end)
 end
 
-local function download_voice(name, done)
-  local voice
-  for _, v in ipairs(M.VOICES) do
-    if v.name == name then voice = v end
-  end
-  if not voice then return done("there's no voice " .. tostring(name)) end
+local function download_voice(key, done)
+  local voice = find_voice(key)
+  if not voice then return done("there's no voice " .. tostring(key)) end
   local dir = M.voices_dir()
-  local onnx = dir .. "/" .. voice.name .. ".onnx"
+  local onnx = dir .. "/" .. voice.key .. ".onnx"
+  if exists(onnx) and exists(onnx .. ".json") then
+    store.set("voice", onnx)
+    notify("reading with " .. voice_label(voice) .. " from now on")
+    return done()
+  end
   local function fetch(path, after)
-    local url = M.VOICE_BASE .. voice.path .. "/" .. voice.name .. path:match("%.onnx.*$")
+    local escaped = voice.onnx:gsub("[^%w_%-%./]", function(c) return string.format("%%%02X", c:byte()) end)
+    local url = M.VOICE_BASE .. escaped .. path:match("%.onnx(.*)$")
     rt.spawn({ M.curl, "-fsSL", "--retry", "2", "-o", path .. ".part", url }, function(r)
       if r.code ~= 0 then
         os.remove(path .. ".part")
-        return done("couldn't download " .. voice.name .. ": " .. trim(r.error or r.stderr))
+        return done("couldn't download " .. voice.key .. ": " .. trim(r.error or r.stderr))
       end
       os.remove(path)
       os.rename(path .. ".part", path)
@@ -774,7 +925,7 @@ local function download_voice(name, done)
     fetch(onnx .. ".json", function()
       fetch(onnx, function()
         store.set("voice", onnx)
-        notify("downloaded the voice " .. voice.name)
+        notify("downloaded " .. voice_label(voice) .. "; reading with it from now on")
         done()
       end)
     end)
@@ -803,7 +954,7 @@ function M.act(name, data)
   if name == "pull" then
     step("pull", pull)
   elseif name == "voice" then
-    step("voice", function(done) download_voice(data and data.choice or M.VOICES[1].name, done) end)
+    step("voice", function(done) download_voice(data and data.choice or M.VOICES[1].key, done) end)
   elseif name == "piper" then
     step("piper", function(done) install_piper(data and data.choice, done) end)
   elseif name == "check" then

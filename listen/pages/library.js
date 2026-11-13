@@ -81,6 +81,49 @@ function link(target) {
   return a;
 }
 
+// An action's button, after a choice when it has some; choices with a group
+// (a voice's language) get a second list to pick the group first.
+function action(item) {
+  const row = el("div", { className: "do" });
+  const choices = item.action.choices || [];
+  const button = el("button");
+  let choice = null;
+  const update = () => {
+    const picked = choices.find((c) => c.value === choice?.value);
+    button.textContent = picked?.button || item.action.label;
+    button.disabled = Boolean(item.ok && picked && picked.value === item.action.selected);
+  };
+  if (choices.length) {
+    choice = el("select", { title: item.name });
+    const fill = (group) => {
+      const shown = group === undefined ? choices : choices.filter((c) => c.group === group);
+      choice.replaceChildren(...shown.map((c) =>
+        el("option", { value: c.value, textContent: c.label, selected: c.value === item.action.selected })));
+      update();
+    };
+    const groups = [...new Set(choices.map((c) => c.group).filter(Boolean))];
+    if (groups.length) {
+      const first = choices.find((c) => c.value === item.action.selected)?.group || item.action.group || groups[0];
+      const group = el("select", { title: "Language" },
+        ...groups.map((g) => el("option", { value: g, textContent: g, selected: g === first })));
+      group.addEventListener("change", () => fill(group.value));
+      row.append(group);
+      fill(group.value);
+    } else {
+      fill(undefined);
+    }
+    choice.addEventListener("change", update);
+    row.append(choice);
+  }
+  update();
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    send("setup", { action: item.action.name, choice: choice?.value ?? item.action.choice });
+  });
+  row.append(button);
+  return row;
+}
+
 function check(item) {
   const mark = item.busy ? "…" : item.ok ? "✓" : item.optional ? "–" : "✗";
   const state = item.busy ? "busy" : item.ok ? "ok" : item.optional ? "optional" : "missing";
@@ -89,24 +132,10 @@ function check(item) {
   if (item.error && !item.busy) body.append(el("p", { className: "error", textContent: item.error }));
   if (!item.ok && !item.busy) {
     for (const command of item.commands || []) body.append(el("pre", {}, el("code", { textContent: command })));
-    if (item.action) {
-      const row = el("div", { className: "do" });
-      let choice = null;
-      if (item.action.choices) {
-        choice = el("select", { title: item.name },
-          ...item.action.choices.map((c) => el("option", { value: c.value, textContent: c.label })));
-        row.append(choice);
-      }
-      const button = el("button", { textContent: item.action.label });
-      button.addEventListener("click", () => {
-        button.disabled = true;
-        send("setup", { action: item.action.name, choice: choice?.value ?? item.action.choice });
-      });
-      row.append(button);
-      body.append(row);
-    }
-    if (item.link) body.append(el("p", { className: "meta" }, link(item.link)));
   }
+  // An action that stays once it's done, e.g. picking another voice.
+  if (item.action && !item.busy && (!item.ok || item.action.keep)) body.append(action(item));
+  if (item.link && !item.busy && (!item.ok || item.action?.keep)) body.append(el("p", { className: "meta" }, link(item.link)));
   return el("li", { className: `check ${state}` }, el("span", { className: "mark", textContent: mark }), body);
 }
 
@@ -115,7 +144,10 @@ function status(data) {
   const left = items.filter((i) => !i.ok && !i.optional).length;
   ready = Boolean(data.ready);
   $("setup").hidden = false;
-  $("setup-title").textContent = left ? `Setup: ${left} ${left === 1 ? "step" : "steps"} left` : "Setup: ready";
+  const voice = items.find((i) => i.id === "voice" && i.ok && i.action?.selected);
+  $("setup-title").textContent = left
+    ? `Setup: ${left} ${left === 1 ? "step" : "steps"} left`
+    : `Setup: ready${voice ? ` · voice: ${voice.detail}` : ""}`;
   if (left) $("setup").open = true;
   $("checks").replaceChildren(...items.map(check));
   render();

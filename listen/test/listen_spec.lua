@@ -162,14 +162,73 @@ describe("listen", function()
     listen().act("check")
     local voice = checked("voice")
     assert.falsy(voice.ok)
-    assert.equals("en_US-lessac-medium", voice.action.choices[1].value)
+    -- From the catalog, by language: Great Britain's English, then the US's, then German.
+    local keys = {}
+    for _, c in ipairs(voice.action.choices) do table.insert(keys, c.value) end
+    assert.same({ "en_GB-alba-medium", "en_US-amy-medium", "en_US-libritts_r-medium", "de_DE-thorsten-high" }, keys)
+    assert.equals("English (United States)", voice.action.group)
+    assert.equals("Download and use (63 MB)", voice.action.choices[1].button)
+    assert.matches("904 speakers", voice.action.choices[3].label)
     listen().status = nil
     listen().act("voice", { choice = "en_GB-alba-medium" })
-    checked("voice", function(i) return i.ok end)
+    voice = checked("voice", function(i) return i.ok end)
     local path = listen().voices_dir() .. "/en_GB-alba-medium.onnx"
     assert.equals(path, listen().voice())
     assert.truthy(io.open(path .. ".json", "rb"))
     assert.falsy(io.open(path .. ".part", "rb"))
+    assert.equals("en_GB-alba-medium", voice.action.selected)
+    assert.truthy(voice.action.keep)
+  end)
+
+  it("switches voices, at once to one already downloaded", function()
+    with({ voice = false })
+    local dir = listen().voices_dir()
+    listen().status = nil
+    listen().act("voice", { choice = "en_US-amy-medium" })
+    local voice = checked("voice", function(i) return i.action.selected == "en_US-amy-medium" end)
+    assert.equals(dir .. "/en_US-amy-medium.onnx", listen().voice())
+    for _, c in ipairs(voice.action.choices) do
+      if c.value == "en_US-amy-medium" then assert.equals("Use", c.button) end
+    end
+
+    -- Alba was downloaded by the test before; picking it needs no download.
+    listen().act("voice", { choice = "en_GB-alba-medium" })
+    assert.equals(dir .. "/en_GB-alba-medium.onnx", listen().voice())
+    assert.equals("listen: reading with Alba, English (Great Britain), medium from now on", last_message())
+  end)
+
+  it("downloads a voice from another language", function()
+    with({ voice = false })
+    listen().status = nil
+    listen().act("voice", { choice = "de_DE-thorsten-high" })
+    local voice = checked("voice", function(i) return i.action.selected == "de_DE-thorsten-high" end)
+    assert.equals("German (Germany)", voice.action.group)
+    local f = assert(io.open(listen().voices_dir() .. "/de_DE-thorsten-high.onnx", "rb"))
+    assert.equals("fake de_DE-thorsten-high.onnx", f:read("a"))
+    f:close()
+  end)
+
+  it("offers a few voices when the catalog can't be fetched", function()
+    with({ voice = false })
+    local base_url = listen().VOICE_BASE
+    listen().forget_catalog()
+    listen().VOICE_BASE = "https://down.invalid/"
+    listen().status = nil
+    listen().act("check")
+    local voice = checked("voice")
+    listen().VOICE_BASE = base_url
+    assert.equals(#listen().VOICES, #voice.action.choices)
+    assert.matches("^couldn't fetch the list of voices", voice.error)
+    listen().forget_catalog()
+  end)
+
+  it("leaves the voice to the config when its option is set", function()
+    listen().status = nil
+    listen().act("check")
+    local voice = checked("voice")
+    assert.truthy(voice.ok)
+    assert.falsy(voice.action)
+    assert.matches("voice option in your config", voice.detail)
   end)
 
   it("says how to install Ollama when it doesn't answer", function()

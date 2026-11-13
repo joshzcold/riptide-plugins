@@ -38,9 +38,16 @@ it either does it for you or shows the command for your system:
 - **Piper**: a button that installs it with `uv tool install piper-tts` or
   `pipx install piper-tts`, whichever you have (pick one if both), or how to
   install uv first.
-- **A voice**: pick one of a few English voices and download it (about 60 MB,
-  from [piper-voices](https://huggingface.co/rhasspy/piper-voices)) into
-  `voices/` beside the clips. Downloads only happen when you press the button.
+- **A voice**: pick a language, then any of
+  [piper-voices](https://huggingface.co/rhasspy/piper-voices)' voices in it
+  (182 in 58 languages; the list is fetched when you open the page and kept
+  for a week), and download it into `voices/` beside the clips. Each shows its
+  quality and download size; downloads only happen when you press the button.
+  The list stays afterwards, so you can switch voices any time (instantly, to
+  one you've already downloaded); the Setup title names the voice in use. New
+  clips use it; earlier clips keep the voice they were read in. Voices with
+  several speakers read with the first. If the list can't be fetched, a few
+  English voices are offered.
 - **ffmpeg** (optional): the install command.
 
 Install commands are given for Debian and Ubuntu (and their derivatives),
@@ -54,7 +61,7 @@ Options, all optional:
 
 ```lua
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen", opts = {
-  voice = os.getenv("HOME") .. "/.local/share/piper/en_US-lessac-medium.onnx", -- another voice
+  voice = os.getenv("HOME") .. "/.local/share/piper/en_US-lessac-medium.onnx", -- any Piper voice; replaces the picker
   read = "article",                -- or "summary"
   model = "llama3.2",              -- any model in Ollama, for summaries
   words = 150,                     -- about how long the summary is
