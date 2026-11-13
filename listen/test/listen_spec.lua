@@ -192,4 +192,31 @@ describe("listen", function()
     assert.falsy(piper.action)
     assert.equals("uv tool install piper-tts", piper.commands[#piper.commands])
   end)
+
+  it("tells distros apart by /etc/os-release", function()
+    local cases = {
+      { 'ID=ubuntu\nID_LIKE=debian\n', "debian" },
+      { 'ID=linuxmint\nID_LIKE="ubuntu debian"\n', "debian" },
+      { 'ID=fedora\n', "fedora" },
+      { 'ID="rocky"\nID_LIKE="rhel centos fedora"\n', "linux" },
+      { 'ID=manjaro\nID_LIKE=arch\n', "arch" },
+      { 'ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\n', "suse" },
+      { 'ID=nixos\n', "linux" },
+    }
+    for _, case in ipairs(cases) do
+      assert.equals(case[2], listen().system(case[1]), case[1])
+    end
+  end)
+
+  it("leaves out install commands it doesn't know", function()
+    local install = listen().install_command
+    assert.equals("sudo dnf install ffmpeg-free", install("ffmpeg", "fedora"))
+    assert.falsy(install("ffmpeg", "suse"))
+    assert.falsy(install("ffmpeg", "linux"))
+    assert.equals("brew install ffmpeg", install("ffmpeg", "macos", true))
+    assert.falsy(install("ffmpeg", "macos", false))
+    assert.falsy(install("ollama", "macos", false))
+    assert.matches("astral.sh/uv/install.sh", install("uv", "macos", false))
+    assert.falsy(install("curl", "windows"))
+  end)
 end)

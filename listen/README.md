@@ -35,6 +35,11 @@ you or shows the command for your system:
   `voices/` beside the clips. Downloads only happen when you press the button.
 - **ffmpeg** (optional): the install command.
 
+Install commands are given for Debian and Ubuntu (and their derivatives),
+Fedora, Arch, openSUSE, macOS with Homebrew and Windows, and left out where
+there's no package that works out of the box, e.g. ffmpeg on openSUSE or RHEL;
+the page links to the project's downloads instead.
+
 Pressing `gA` before Piper and a voice are ready opens the library too.
 
 Options, all optional:

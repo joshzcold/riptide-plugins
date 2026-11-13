@@ -64,20 +64,31 @@ local function refresh()
   for _, page in ipairs(libraries) do pcall(page.send, page, "clips", payload) end
 end
 
--- A program's path: the option if it's set, else on PATH, else in
--- ~/.local/bin, where uv and pipx put piper even when that isn't on riptide's PATH.
+-- Where a program is: on PATH, else where uv, pipx, cargo and Homebrew put
+-- programs, which riptide started from a desktop may not have on PATH.
+local function locate(name)
+  local found = rt.which(name)
+  if found or name:find("/", 1, true) then return found end
+  local home = os.getenv("HOME")
+  local dirs = { "/opt/homebrew/bin/", "/usr/local/bin/" }
+  if home then
+    table.insert(dirs, 1, home .. "/.cargo/bin/")
+    table.insert(dirs, 1, home .. "/.local/bin/")
+  end
+  for _, dir in ipairs(dirs) do
+    local f = io.open(dir .. name, "rb")
+    if f then
+      f:close()
+      return dir .. name
+    end
+  end
+end
+
+-- A program's path: the option if it's set, else wherever locate finds it.
 local function program(name)
   local given = opts[name]
   if given and given ~= "" then return rt.which(given) end
-  local found = rt.which(name)
-  if found then return found end
-  local home = os.getenv("HOME")
-  local local_bin = home and (home .. "/.local/bin/" .. name)
-  local f = local_bin and io.open(local_bin, "rb")
-  if f then
-    f:close()
-    return local_bin
-  end
+  return locate(name)
 end
 
 local function exists(path)
@@ -315,43 +326,79 @@ end
 M.busy = {}
 M.failed = {}
 
--- The system's package manager family: debian, fedora, arch, suse, macos, windows or linux.
-function M.system()
+-- The system's package manager family from /etc/os-release's text: debian,
+-- fedora, arch or suse, else linux. RHEL and its clones list fedora in ID_LIKE
+-- but lack Fedora's packages, so they're plain linux.
+function M.system(os_release)
   if rt.platform ~= "linux" then return rt.platform end
-  local f = io.open("/etc/os-release", "rb")
-  if not f then return "linux" end
-  local text = "\n" .. f:read("a")
-  f:close()
-  local ids = (text:match('\nID="?([^"\n]+)') or "") .. " " .. (text:match('\nID_LIKE="?([^"\n]+)') or "")
-  for _, family in ipairs({ "debian", "ubuntu", "fedora", "rhel", "arch", "suse" }) do
-    if ids:find(family, 1, true) then
-      return ({ ubuntu = "debian", rhel = "fedora" })[family] or family
-    end
+  local text = os_release
+  if not text then
+    local f = io.open("/etc/os-release", "rb")
+    if not f then return "linux" end
+    text = f:read("a")
+    f:close()
   end
+  text = "\n" .. text
+  local id = text:match('\nID="?([^"\n]+)') or ""
+  local like = " " .. (text:match('\nID_LIKE="?([^"\n]+)') or "") .. " "
+  local function is(name) return id == name or like:find(" " .. name .. " ", 1, true) end
+  if id == "fedora" then return "fedora" end
+  if is("debian") or is("ubuntu") then return "debian" end
+  if is("arch") then return "arch" end
+  if id:match("^opensuse") or is("suse") or is("opensuse") then return "suse" end
   return "linux"
 end
 
+-- The command that installs each program on each system; none where we
+-- don't know one that works out of the box.
+local SCRIPT_UV = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+local SCRIPT_OLLAMA = "curl -fsSL https://ollama.com/install.sh | sh"
 local INSTALL = {
-  debian = "sudo apt install %s",
-  fedora = "sudo dnf install %s",
-  arch = "sudo pacman -S %s",
-  suse = "sudo zypper install %s",
-  macos = "brew install %s",
-  windows = "winget install %s",
+  curl = {
+    debian = "sudo apt install curl",
+    fedora = "sudo dnf install curl",
+    arch = "sudo pacman -S curl",
+    suse = "sudo zypper install curl",
+  },
+  ffmpeg = {
+    debian = "sudo apt install ffmpeg",
+    fedora = "sudo dnf install ffmpeg-free",
+    arch = "sudo pacman -S ffmpeg",
+    brew = "brew install ffmpeg",
+    windows = "winget install Gyan.FFmpeg",
+  },
+  uv = {
+    debian = SCRIPT_UV,
+    fedora = SCRIPT_UV,
+    arch = "sudo pacman -S uv",
+    suse = SCRIPT_UV,
+    linux = SCRIPT_UV,
+    brew = "brew install uv",
+    macos = SCRIPT_UV,
+    windows = "winget install astral-sh.uv",
+  },
+  ollama = {
+    debian = SCRIPT_OLLAMA,
+    fedora = SCRIPT_OLLAMA,
+    arch = "sudo pacman -S ollama",
+    suse = SCRIPT_OLLAMA,
+    linux = SCRIPT_OLLAMA,
+    brew = "brew install ollama",
+    windows = "winget install Ollama.Ollama",
+  },
 }
 
--- Package names where they differ from the program's.
-local PACKAGES = {
-  pipx = { arch = "python-pipx", suse = "python3-pipx", windows = "pipx" },
-  ffmpeg = { fedora = "ffmpeg-free", windows = "Gyan.FFmpeg" },
-  curl = { windows = "cURL.cURL" },
-}
+-- The command that installs name on system, or nil. On macOS, brew's when
+-- Homebrew is installed.
+function M.install_command(name, system, has_brew)
+  local commands = INSTALL[name] or {}
+  if system == "macos" and has_brew then return commands.brew or commands.macos end
+  return commands[system]
+end
 
 local function install(name)
   local system = M.system()
-  local command = INSTALL[system]
-  if not command then return nil end
-  return command:format((PACKAGES[name] or {})[system] or name)
+  return M.install_command(name, system, system == "macos" and locate("brew") ~= nil)
 end
 
 -- The commands given, without the ones there's no install command for here.
@@ -370,22 +417,6 @@ M.installers = {
   { name = "pipx", program = "pipx", args = { "install", "piper-tts" } },
 }
 
-local function uv_install()
-  local system = M.system()
-  if system == "macos" then return "brew install uv" end
-  if system == "windows" then return "winget install astral-sh.uv" end
-  if system == "arch" then return "sudo pacman -S uv" end
-  return "curl -LsSf https://astral.sh/uv/install.sh | sh"
-end
-
-local function ollama_install()
-  local system = M.system()
-  if system == "macos" then return "brew install ollama" end
-  if system == "windows" then return "winget install Ollama.Ollama" end
-  if system == "arch" then return "sudo pacman -S ollama" end
-  return "curl -fsSL https://ollama.com/install.sh | sh"
-end
-
 local function failed(id, item)
   if M.failed[id] then item.error = M.failed[id] end
   if M.busy[id] then item.busy = true end
@@ -402,7 +433,7 @@ function M.local_checks()
     local item = { id = "piper", name = "Piper", ok = false, detail = "reads the summary aloud; it isn't installed" }
     local found = {}
     for _, tool in ipairs(M.installers) do
-      if rt.which(tool.program) then table.insert(found, { value = tool.name, label = tool.name }) end
+      if locate(tool.program) then table.insert(found, { value = tool.name, label = tool.name }) end
     end
     if #found > 1 then
       item.action = { name = "piper", label = "Install", choices = found }
@@ -410,7 +441,7 @@ function M.local_checks()
       item.action = { name = "piper", label = "Install with " .. found[1].value, choice = found[1].value }
     else
       item.detail = item.detail .. ". Install uv, then piper (or: pipx install piper-tts)"
-      item.commands = commands(uv_install(), "uv tool install piper-tts")
+      item.commands = commands(install("uv"), "uv tool install piper-tts")
     end
     item.busy_text = "Installing piper-tts…"
     table.insert(items, failed("piper", item))
@@ -466,14 +497,14 @@ function M.check(callback)
     local ok, tags = pcall(rt.json.decode, r.stdout or "")
     if r.code ~= 0 or not ok or type(tags) ~= "table" then
       local item = { id = "ollama", name = "Ollama", ok = false }
-      if rt.which("ollama") then
+      if locate("ollama") then
         item.detail = "installed, but not answering at " .. base .. ". Start it"
         item.commands = rt.platform == "linux" and { "systemctl start ollama", "ollama serve" } or { "ollama serve" }
       elseif opts.ollama and opts.ollama ~= "" then
         item.detail = "nothing answers at " .. base .. ", the ollama option"
       else
         item.detail = "writes the summaries, on your computer; it isn't installed"
-        item.commands = { ollama_install() }
+        item.commands = commands(install("ollama"))
         item.link = { url = "https://ollama.com/download", text = "ollama.com/download" }
       end
       return finish({ item, { id = "model", name = "Model " .. model(), ok = false, detail = "needs Ollama" } })
@@ -565,7 +596,7 @@ local function install_piper(choice, done)
   for _, t in ipairs(M.installers) do
     if t.name == choice then tool = t end
   end
-  local path = tool and rt.which(tool.program)
+  local path = tool and locate(tool.program)
   if not path then return done(tostring(choice) .. " isn't installed") end
   local argv = { path, table.unpack(tool.args) }
   rt.spawn(argv, function(r)
