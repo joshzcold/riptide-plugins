@@ -27,8 +27,9 @@ you or shows the command for your system:
 - **Ollama**: the install command, or how to start it if it's installed but
   not answering.
 - **The model**: a button that pulls it through Ollama.
-- **Piper**: a button that runs `pipx install piper-tts`, or how to install
-  pipx first.
+- **Piper**: a button that installs it with `uv tool install piper-tts` or
+  `pipx install piper-tts`, whichever you have (pick one if both), or how to
+  install uv first.
 - **A voice**: pick one of a few English voices and download it (about 60 MB,
   from [piper-voices](https://huggingface.co/rhasspy/piper-voices)) into
   `voices/` beside the clips. Downloads only happen when you press the button.

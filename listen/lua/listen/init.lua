@@ -65,7 +65,7 @@ local function refresh()
 end
 
 -- A program's path: the option if it's set, else on PATH, else in
--- ~/.local/bin, where pipx puts piper even when that isn't on riptide's PATH.
+-- ~/.local/bin, where uv and pipx put piper even when that isn't on riptide's PATH.
 local function program(name)
   local given = opts[name]
   if given and given ~= "" then return rt.which(given) end
@@ -309,7 +309,7 @@ function M.library()
 end
 
 -- Setup: what's ready, how to install what isn't, and the steps the page can
--- take itself (pull the model, download a voice, install piper with pipx).
+-- take itself (pull the model, download a voice, install piper with uv or pipx).
 
 -- Steps running now, and the last failure of each: { pull = true }, { pull = "…" }.
 M.busy = {}
@@ -364,6 +364,20 @@ local function commands(...)
   return list
 end
 
+-- The tools that can install piper-tts, by name; the tests swap in fakes.
+M.installers = {
+  { name = "uv", program = "uv", args = { "tool", "install", "piper-tts" } },
+  { name = "pipx", program = "pipx", args = { "install", "piper-tts" } },
+}
+
+local function uv_install()
+  local system = M.system()
+  if system == "macos" then return "brew install uv" end
+  if system == "windows" then return "winget install astral-sh.uv" end
+  if system == "arch" then return "sudo pacman -S uv" end
+  return "curl -LsSf https://astral.sh/uv/install.sh | sh"
+end
+
 local function ollama_install()
   local system = M.system()
   if system == "macos" then return "brew install ollama" end
@@ -386,13 +400,19 @@ function M.local_checks()
     table.insert(items, { id = "piper", name = "Piper", ok = true, detail = piper })
   else
     local item = { id = "piper", name = "Piper", ok = false, detail = "reads the summary aloud; it isn't installed" }
-    if rt.which("pipx") then
-      item.action = { name = "piper", label = "Install with pipx" }
-      item.busy_text = "Installing piper-tts…"
-    else
-      item.detail = item.detail .. ". Install pipx, then piper"
-      item.commands = commands(install("pipx"), "pipx ensurepath", "pipx install piper-tts")
+    local found = {}
+    for _, tool in ipairs(M.installers) do
+      if rt.which(tool.program) then table.insert(found, { value = tool.name, label = tool.name }) end
     end
+    if #found > 1 then
+      item.action = { name = "piper", label = "Install", choices = found }
+    elseif #found == 1 then
+      item.action = { name = "piper", label = "Install with " .. found[1].value, choice = found[1].value }
+    else
+      item.detail = item.detail .. ". Install uv, then piper (or: pipx install piper-tts)"
+      item.commands = commands(uv_install(), "uv tool install piper-tts")
+    end
+    item.busy_text = "Installing piper-tts…"
     table.insert(items, failed("piper", item))
   end
 
@@ -540,24 +560,31 @@ local function download_voice(name, done)
   end)
 end
 
-local function install_piper(done)
-  local pipx = rt.which("pipx")
-  if not pipx then return done("pipx isn't installed") end
-  rt.spawn({ pipx, "install", "piper-tts" }, function(r)
-    if r.code ~= 0 then return done("pipx install piper-tts failed: " .. trim(r.error or r.stderr)) end
+local function install_piper(choice, done)
+  local tool
+  for _, t in ipairs(M.installers) do
+    if t.name == choice then tool = t end
+  end
+  local path = tool and rt.which(tool.program)
+  if not path then return done(tostring(choice) .. " isn't installed") end
+  local argv = { path, table.unpack(tool.args) }
+  rt.spawn(argv, function(r)
+    if r.code ~= 0 then
+      return done(tool.name .. " couldn't install piper-tts: " .. trim(r.error or (r.stderr ~= "" and r.stderr or r.stdout)))
+    end
     notify("installed piper")
     done()
   end)
 end
 
--- A step the page asked for: "pull", "voice" (with data.choice) or "piper".
+-- A step the page asked for: "pull", "voice" or "piper" (with data.choice).
 function M.act(name, data)
   if name == "pull" then
     step("pull", pull)
   elseif name == "voice" then
     step("voice", function(done) download_voice(data and data.choice or M.VOICES[1].name, done) end)
   elseif name == "piper" then
-    step("piper", install_piper)
+    step("piper", function(done) install_piper(data and data.choice, done) end)
   elseif name == "check" then
     broadcast()
   end

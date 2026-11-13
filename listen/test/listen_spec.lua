@@ -12,7 +12,7 @@ local function make_clip()
 end
 
 -- The test config's options, with these changed.
-local base
+local base, installers
 local function with(changes)
   local opts = {}
   for k, v in pairs(base) do opts[k] = v end
@@ -39,6 +39,8 @@ end
 describe("listen", function()
   before_each(function()
     base = base or listen().options()
+    installers = installers or listen().installers
+    listen().installers = installers
     listen().setup(base)
     listen().status = nil
     listen().curl = plugin_test.dir .. "/test/bin/fake-curl"
@@ -156,5 +158,38 @@ describe("listen", function()
     keys("gA")
     wait_until(function() return rt.url():match("^riptide://listen%.plugin/") end, 8000)
     assert.matches("isn't there", checked("voice").detail)
+  end)
+
+  it("installs piper with whichever of uv and pipx is there", function()
+    local bin = plugin_test.dir .. "/test/bin/"
+    os.remove(bin .. ".installed")
+    listen().installers = {
+      { name = "uv", program = bin .. "fake-uv", args = { "tool", "install", "piper-tts" } },
+      { name = "pipx", program = "no-such-pipx", args = { "install", "piper-tts" } },
+    }
+    with({ piper = "no-such-piper" })
+    listen().status = nil
+    listen().act("check")
+    local piper = checked("piper")
+    assert.falsy(piper.ok)
+    assert.equals("Install with uv", piper.action.label)
+    assert.equals("uv", piper.action.choice)
+    clear_messages()
+    listen().act("piper", { choice = "uv" })
+    wait_until(function() return last_message() == "listen: installed piper" end, 8000)
+    local f = assert(io.open(bin .. ".installed", "rb"))
+    assert.equals("tool install piper-tts", f:read("a"))
+    f:close()
+    os.remove(bin .. ".installed")
+  end)
+
+  it("says how to install uv when neither uv nor pipx is there", function()
+    listen().installers = { { name = "uv", program = "no-such-uv", args = {} } }
+    with({ piper = "no-such-piper" })
+    listen().status = nil
+    listen().act("check")
+    local piper = checked("piper")
+    assert.falsy(piper.action)
+    assert.equals("uv tool install piper-tts", piper.commands[#piper.commands])
   end)
 end)

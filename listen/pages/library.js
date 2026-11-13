@@ -90,7 +90,7 @@ function check(item) {
       const button = el("button", { textContent: item.action.label });
       button.addEventListener("click", () => {
         button.disabled = true;
-        send("setup", { action: item.action.name, choice: choice?.value });
+        send("setup", { action: item.action.name, choice: choice?.value ?? item.action.choice });
       });
       row.append(button);
       body.append(row);
