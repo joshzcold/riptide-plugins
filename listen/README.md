@@ -79,8 +79,8 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen",
 } })
 ```
 
-With [ffmpeg](https://ffmpeg.org) installed, clips are saved as Opus, about a
-tenth the size of the WAV Piper writes. `:pack-health` checks for piper, the
+With [ffmpeg](https://ffmpeg.org) installed, clips are compressed to `.ogg`,
+about a tenth the size of the `.wav` Piper and Kokoro write. `:pack-health` checks for piper, the
 voice and ffmpeg too.
 
 It brings [reader](../reader), for Readability. It asks to read the pages you

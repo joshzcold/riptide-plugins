@@ -913,10 +913,10 @@ function M.local_checks()
 
   local ffmpeg = program("ffmpeg")
   if ffmpeg then
-    table.insert(items, { id = "ffmpeg", name = "ffmpeg", ok = true, optional = true, detail = "clips are saved as Opus" })
+    table.insert(items, { id = "ffmpeg", name = "ffmpeg", ok = true, optional = true, detail = "found: clips are compressed to .ogg, about a tenth the size of .wav" })
   else
     table.insert(items, { id = "ffmpeg", name = "ffmpeg", ok = false, optional = true,
-      detail = "optional: clips are saved as WAV, about 10 times larger", commands = commands(install("ffmpeg")),
+      detail = "optional: clips are saved as .wav, about 10 times the size of .ogg", commands = commands(install("ffmpeg")),
       link = { url = "https://ffmpeg.org/download.html", text = "ffmpeg.org/download" } })
   end
   return items
