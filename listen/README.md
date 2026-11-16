@@ -1,11 +1,11 @@
 # listen
 
 Hear the article on the page you're on read aloud by
-[Piper](https://github.com/OHF-Voice/piper1-gpl), or a short summary of it
+[Kokoro](https://huggingface.co/hexgrad/Kokoro-82M), or a short summary of it
 written by a local LLM, and keep the clips to play later, with the text
 following along.
 
-`gA` (or `:listen`) finds the article with reader's Readability and has Piper
+`gA` (or `:listen`) finds the article with reader's Readability and has Kokoro
 read it into a clip, paragraph by paragraph. `:listen summary` asks
 [Ollama](https://ollama.com) for a short summary meant to be heard and reads
 that instead (`read = "summary"` makes it what `gA` does). It works in the
@@ -18,8 +18,8 @@ under the player with the paragraph being read marked and scrolled into view;
 click a paragraph to jump to it. Scrolling the text yourself pauses following
 for a few seconds.
 
-Nothing leaves your computer: summaries are written by Ollama on `localhost`,
-and the clips are saved in `~/.local/share/riptide/listen` (or the `dir`
+Nothing leaves your computer: Kokoro reads on your CPU, summaries are written
+by Ollama on `localhost`, and the clips are saved in `~/.local/share/riptide/listen` (or the `dir`
 option).
 
 ## Setup
@@ -28,35 +28,26 @@ option).
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen" })
 ```
 
-Then open `:listen-library`. Its Setup section checks for Piper, a voice and
+Then open `:listen-library`. Its Setup section checks for Kokoro, its voice and
 ffmpeg, and, for summaries, Ollama and the model. For each one that's missing,
 it either does it for you or shows the command for your system:
 
 - **Ollama**: the install command, or how to start it if it's installed but
   not answering.
 - **The model**: a button that pulls it through Ollama.
-- **Piper**: a button that installs it with `uv tool install piper-tts` or
-  `pipx install piper-tts`, whichever you have (pick one if both), or how to
-  install uv first.
-- **A voice**: pick a language, then any of
-  [piper-voices](https://huggingface.co/rhasspy/piper-voices)' voices in it
-  (182 in 58 languages; the list is fetched when you open the page and kept
-  for a week), and download it into `voices/` beside the clips. Each shows its
-  quality and download size; downloads only happen when you press the button.
-  The list stays afterwards, so you can switch voices any time (instantly, to
-  one you've already downloaded); the Setup title names the voice in use. New
-  clips use it; earlier clips keep the voice they were read in. Voices with
-  several speakers read with the first. If the list can't be fetched, a few
-  English voices are offered.
-- **Engine**: Piper reads by default. **Install Kokoro** downloads
-  [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (about 350 MB, from
-  [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)), which sounds
-  much more natural and also runs on your computer, on the CPU. It needs
-  [uv](https://docs.astral.sh/uv/): listen writes a small script into
-  `voices/kokoro/` and runs it with `uv run --script`, which installs its
-  Python packages the first time. Kokoro has 41 voices in English (American
-  and British), Spanish, French, Hindi, Italian and Brazilian Portuguese, picked
-  in the Voice row like Piper's; you can switch between the engines any time.
+- **Kokoro**: **Install Kokoro** downloads its model and voices (about 350 MB,
+  from [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)) into
+  `voices/kokoro/` beside the clips. It needs [uv](https://docs.astral.sh/uv/),
+  or the page shows how to install it: listen writes a small script there and
+  runs it with `uv run --script`, which installs its Python packages the first
+  time, so the first clip takes a little longer.
+- **The voice**: pick a language, then any of Kokoro's 41 voices in it:
+  English (American and British), Spanish, French, Hindi, Italian and
+  Brazilian Portuguese. Heart is the default; it and Bella are the ones
+  Kokoro's authors grade best. Switching is instant, and the Setup title
+  names the voice in use. New clips use it; earlier clips keep the voice they
+  were read in. Each voice reads its own language, so pick an English one for
+  English articles.
 - **ffmpeg** (optional): the install command.
 
 Install commands are given for Debian and Ubuntu (and their derivatives),
@@ -64,13 +55,12 @@ Fedora, Arch, openSUSE, macOS with Homebrew and Windows, and left out where
 there's no package that works out of the box, e.g. ffmpeg on openSUSE or RHEL;
 the page links to the project's downloads instead.
 
-Pressing `gA` before Piper and a voice are ready opens the library too.
+Pressing `gA` before Kokoro is ready opens the library too.
 
 Options, all optional:
 
 ```lua
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen", opts = {
-  voice = os.getenv("HOME") .. "/.local/share/piper/en_US-lessac-medium.onnx", -- any Piper voice; replaces the picker
   read = "article",                -- or "summary"
   model = "llama3.2",              -- any model in Ollama, for summaries
   words = 150,                     -- about how long the summary is
@@ -80,9 +70,9 @@ rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "listen",
 ```
 
 With [ffmpeg](https://ffmpeg.org) installed, clips are compressed to `.ogg`,
-about a tenth the size of the `.wav` Piper and Kokoro write. `:pack-health` checks for piper, the
-voice and ffmpeg too.
+about a tenth the size of the `.wav` Kokoro writes. `:pack-health` checks for
+Kokoro and ffmpeg too.
 
 It brings [reader](../reader), for Readability. It asks to read the pages you
-use it on, to run curl, piper and ffmpeg, and to read and delete the clips it
+use it on, to run curl, uv and ffmpeg, and to read and delete the clips it
 saved. It needs riptide 0.20 or newer, whose plugin pages can play audio.

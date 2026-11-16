@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-# uv as listen runs it: "tool install piper-tts" notes its arguments in
-# .installed beside this file; "run --script kokoro.py" lists three voices, or
-# reads each line into half a second of silence as WAV, noting its arguments
-# in .ran and logging "Wrote PATH" as the real script does.
+# uv as listen runs it: "run --script kokoro.py" lists three voices, or reads
+# each line into half a second of silence as WAV, noting its arguments in .ran
+# beside this file and logging "Wrote PATH" as the real script does.
 import json, os, sys, wave
 
 here = os.path.dirname(os.path.abspath(__file__))
 args = sys.argv[1:]
-if args[:1] == ["tool"]:
-    with open(os.path.join(here, ".installed"), "w") as f:
-        f.write(" ".join(args))
-    sys.exit(0)
 assert args[:2] == ["run", "--script"] and os.path.isfile(args[2]), args
 if "--list-voices" in args:
     print(json.dumps(["af_heart", "am_michael", "bf_emma"]))

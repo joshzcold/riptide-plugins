@@ -1,6 +1,6 @@
 -- The script listen runs with `uv run --script` to read with Kokoro. Plugins
--- can't see their own folder, so listen writes it into its data folder. It
--- reads like piper does: a line of text in, a WAV file out, "Wrote PATH" logged.
+-- can't see their own folder, so listen writes it into its data folder. Each
+-- line of text in becomes a WAV file out, with "Wrote PATH" logged.
 return [=[
 # /// script
 # requires-python = ">=3.10,<3.14"
@@ -9,7 +9,7 @@ return [=[
 """Kokoro text to speech for riptide's listen plugin.
 
 --list-voices prints the voices as JSON. Otherwise each line of stdin becomes
-OUTPUT_DIR/NNNNN.wav, and "Wrote PATH" goes to stderr, as piper writes them.
+OUTPUT_DIR/NNNNN.wav, and "Wrote PATH" goes to stderr.
 """
 import argparse
 import json

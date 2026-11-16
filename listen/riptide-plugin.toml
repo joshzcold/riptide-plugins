@@ -1,5 +1,5 @@
 name = "listen"
-description = "Hear the page's article read aloud by Piper, or a summary from a local LLM, with its text following along"
+description = "Hear the page's article read aloud by Kokoro, or a summary from a local LLM, with its text following along"
 riptide = ">=0.20"
 # Readability, to find the article.
 dependencies = ["reader"]
@@ -7,7 +7,7 @@ dependencies = ["reader"]
 [permissions]
 # Reads the article out of the page you're on.
 pages = ["*"]
-# Runs curl (to reach Ollama), piper and ffmpeg.
+# Runs curl (to reach Ollama and download Kokoro), uv (to run Kokoro) and ffmpeg.
 spawn = true
 # Reads and deletes the clips it saved, to play them on its page.
 files = true
@@ -25,11 +25,6 @@ default = "article"
 description = "What the key reads: the article itself, or a summary from Ollama (:listen article or :listen summary picks for one page)"
 
 [[option]]
-name = "voice"
-type = "path"
-description = "A Piper voice's .onnx file (default: the one downloaded on :listen-library)"
-
-[[option]]
 name = "model"
 description = "The Ollama model that writes summaries"
 default = "llama3.2"
@@ -44,11 +39,6 @@ name = "words"
 type = "number"
 description = "About how long a summary is, in words"
 default = 150
-
-[[option]]
-name = "piper"
-type = "path"
-description = "The piper program, if it isn't on your PATH"
 
 [[option]]
 name = "ffmpeg"

@@ -12,8 +12,18 @@ local function make_clip(mode)
   return listen().clips()[1]
 end
 
+local bin = plugin_test.dir .. "/test/bin/"
+
+-- The arguments listen last ran Kokoro's script with.
+local function ran()
+  local f = assert(io.open(bin .. ".ran", "rb"))
+  local args = f:read("a")
+  f:close()
+  return args
+end
+
 -- The test config's options, with these changed.
-local base, installers
+local base
 local function with(changes)
   local opts = {}
   for k, v in pairs(base) do opts[k] = v end
@@ -40,14 +50,18 @@ end
 describe("listen", function()
   before_each(function()
     base = base or listen().options()
-    installers = installers or listen().installers
-    listen().installers = installers
     listen().setup(base)
     listen().status = nil
-    listen().curl = plugin_test.dir .. "/test/bin/fake-curl"
-    os.remove(plugin_test.dir .. "/test/bin/.pulled")
-    listen().uv = "uv"
-    listen().use_engine("piper")
+    listen().curl = bin .. "fake-curl"
+    os.remove(bin .. ".pulled")
+    listen().uv = bin .. "fake-uv"
+    if not listen().ready() then
+      local installed
+      listen().install(function(err) installed = err or true end)
+      wait_until(function() return installed ~= nil end, 8000)
+      assert.equals(true, installed)
+    end
+    assert.falsy(listen().use_voice("af_heart"))
     for _, clip in ipairs(listen().clips()) do listen().delete(clip.id) end
   end)
 
@@ -57,6 +71,7 @@ describe("listen", function()
     assert.equals("Life in the tide pools", clip.title)
     assert.falsy(clip.summary)
     assert.matches("%.wav$", clip.file, "no ffmpeg in the test config")
+    assert.matches("%-%-voice af_heart %-%-output_dir ", ran())
     local text = listen().text(clip)
     assert.equals("Life in the tide pools", text[1].text)
     assert.truthy(text[1].heading)
@@ -141,6 +156,8 @@ describe("listen", function()
     assert.equals(0, listen().setup_shown.left)
     assert.truthy(listen().status.ready)
     assert.truthy(item(listen().status, "model").ok)
+    assert.truthy(item(listen().status, "kokoro").ok)
+    assert.equals("Heart, English (American), female", item(listen().status, "voice").detail)
     assert.falsy(item(listen().status, "ffmpeg").ok)
     assert.truthy(item(listen().status, "ffmpeg").optional)
   end)
@@ -158,79 +175,40 @@ describe("listen", function()
     assert.truthy(listen().status.ready)
   end)
 
-  it("downloads a voice when none is set", function()
-    with({ voice = false })
+  it("installs Kokoro from the setup and lists its voices", function()
+    for _, name in ipairs(listen().KOKORO_FILES) do os.remove(listen().kokoro_dir() .. "/" .. name) end
+    assert.falsy(listen().ready())
     listen().status = nil
     listen().act("check")
-    local voice = checked("voice")
-    assert.falsy(voice.ok)
-    -- From the catalog, by language: Great Britain's English, then the US's, then German.
-    local keys = {}
-    for _, c in ipairs(voice.action.choices) do table.insert(keys, c.value) end
-    assert.same({ "en_GB-alba-medium", "en_US-amy-medium", "en_US-libritts_r-medium", "de_DE-thorsten-high" }, keys)
-    assert.equals("English (United States)", voice.action.group)
-    assert.equals("Download and use (63 MB)", voice.action.choices[1].button)
-    assert.matches("904 speakers", voice.action.choices[3].label)
+    local kokoro = checked("kokoro")
+    assert.falsy(kokoro.ok)
+    assert.equals("kokoro", kokoro.action.name)
+    assert.falsy(item(listen().status, "voice"))
+    assert.falsy(listen().status.ready)
+
     listen().status = nil
-    listen().act("voice", { choice = "en_GB-alba-medium" })
-    voice = checked("voice", function(i) return i.ok end)
-    local path = listen().voices_dir() .. "/en_GB-alba-medium.onnx"
-    assert.equals(path, listen().voice())
-    assert.truthy(io.open(path .. ".json", "rb"))
-    assert.falsy(io.open(path .. ".part", "rb"))
-    assert.equals("en_GB-alba-medium", voice.action.selected)
+    listen().act("kokoro")
+    checked("kokoro", function(i) return i.ok end)
+    for _, name in ipairs({ "kokoro-v1.0.onnx", "voices-v1.0.bin", "kokoro.py" }) do
+      assert.truthy(io.open(listen().kokoro_dir() .. "/" .. name, "rb"), name)
+    end
+    local voice = checked("voice")
+    assert.equals("voice", voice.action.name)
+    assert.equals("af_heart", voice.action.selected)
+    assert.equals("English (American)", voice.action.group)
+    assert.equals("English (British)", voice.action.choices[3].group)
+    assert.equals("Emma · female", voice.action.choices[3].label)
     assert.truthy(voice.action.keep)
   end)
 
-  it("switches voices, at once to one already downloaded", function()
-    with({ voice = false })
-    local dir = listen().voices_dir()
-    listen().status = nil
-    listen().act("voice", { choice = "en_US-amy-medium" })
-    local voice = checked("voice", function(i) return i.action.selected == "en_US-amy-medium" end)
-    assert.equals(dir .. "/en_US-amy-medium.onnx", listen().voice())
-    for _, c in ipairs(voice.action.choices) do
-      if c.value == "en_US-amy-medium" then assert.equals("Use", c.button) end
-    end
-
-    -- Alba was downloaded by the test before; picking it needs no download.
-    listen().act("voice", { choice = "en_GB-alba-medium" })
-    assert.equals(dir .. "/en_GB-alba-medium.onnx", listen().voice())
-    assert.equals("listen: reading with Alba, English (Great Britain), medium from now on", last_message())
-  end)
-
-  it("downloads a voice from another language", function()
-    with({ voice = false })
-    listen().status = nil
-    listen().act("voice", { choice = "de_DE-thorsten-high" })
-    local voice = checked("voice", function(i) return i.action.selected == "de_DE-thorsten-high" end)
-    assert.equals("German (Germany)", voice.action.group)
-    local f = assert(io.open(listen().voices_dir() .. "/de_DE-thorsten-high.onnx", "rb"))
-    assert.equals("fake de_DE-thorsten-high.onnx", f:read("a"))
-    f:close()
-  end)
-
-  it("offers a few voices when the catalog can't be fetched", function()
-    with({ voice = false })
-    local base_url = listen().VOICE_BASE
-    listen().forget_catalog()
-    listen().VOICE_BASE = "https://down.invalid/"
-    listen().status = nil
-    listen().act("check")
-    local voice = checked("voice")
-    listen().VOICE_BASE = base_url
-    assert.equals(#listen().VOICES, #voice.action.choices)
-    assert.matches("^couldn't fetch the list of voices", voice.error)
-    listen().forget_catalog()
-  end)
-
-  it("leaves the voice to the config when its option is set", function()
-    listen().status = nil
-    listen().act("check")
-    local voice = checked("voice")
-    assert.truthy(voice.ok)
-    assert.falsy(voice.action)
-    assert.matches("voice option in your config", voice.detail)
+  it("switches the voice", function()
+    clear_messages()
+    listen().act("voice", { choice = "bf_emma" })
+    assert.equals("bf_emma", listen().voice())
+    assert.equals("listen: reading with Emma, English (British), female from now on", last_message())
+    make_clip()
+    assert.matches("%-%-voice bf_emma", ran())
+    assert.truthy(listen().use_voice("zz_nobody"))
   end)
 
   it("says how to install Ollama when it doesn't answer", function()
@@ -252,46 +230,17 @@ describe("listen", function()
     assert.truthy(listen().status.ready)
   end)
 
-  it("opens the setup instead when there's no voice", function()
-    with({ voice = plugin_test.dir .. "/test/voice/none.onnx" })
+  it("opens the setup, which says how to install uv, when Kokoro can't run", function()
+    listen().uv = "no-such-uv"
     run("open " .. page("article.html"))
     wait_for("load_finished", { pattern = "plugin-test.localhost" })
     keys("gA")
     wait_until(function() return rt.url():match("^riptide://listen%.plugin/") end, 8000)
-    assert.matches("isn't there", checked("voice").detail)
-  end)
-
-  it("installs piper with whichever of uv and pipx is there", function()
-    local bin = plugin_test.dir .. "/test/bin/"
-    os.remove(bin .. ".installed")
-    listen().installers = {
-      { name = "uv", program = bin .. "fake-uv", args = { "tool", "install", "piper-tts" } },
-      { name = "pipx", program = "no-such-pipx", args = { "install", "piper-tts" } },
-    }
-    with({ piper = "no-such-piper" })
-    listen().status = nil
-    listen().act("check")
-    local piper = checked("piper")
-    assert.falsy(piper.ok)
-    assert.equals("Install with uv", piper.action.label)
-    assert.equals("uv", piper.action.choice)
-    clear_messages()
-    listen().act("piper", { choice = "uv" })
-    wait_until(function() return last_message() == "listen: installed piper" end, 8000)
-    local f = assert(io.open(bin .. ".installed", "rb"))
-    assert.equals("tool install piper-tts", f:read("a"))
-    f:close()
-    os.remove(bin .. ".installed")
-  end)
-
-  it("says how to install uv when neither uv nor pipx is there", function()
-    listen().installers = { { name = "uv", program = "no-such-uv", args = {} } }
-    with({ piper = "no-such-piper" })
-    listen().status = nil
-    listen().act("check")
-    local piper = checked("piper")
-    assert.falsy(piper.action)
-    assert.equals("uv tool install piper-tts", piper.commands[#piper.commands])
+    local kokoro = checked("kokoro")
+    assert.falsy(kokoro.ok)
+    assert.falsy(kokoro.action)
+    assert.matches("needs uv", kokoro.detail)
+    assert.equals(0, #listen().clips())
   end)
 
   it("tells distros apart by /etc/os-release", function()
@@ -319,55 +268,5 @@ describe("listen", function()
     assert.falsy(install("ollama", "macos", false))
     assert.matches("astral.sh/uv/install.sh", install("uv", "macos", false))
     assert.falsy(install("curl", "windows"))
-  end)
-
-  it("installs Kokoro, reads with it and switches its voice", function()
-    local bin = plugin_test.dir .. "/test/bin/"
-    listen().uv = bin .. "fake-uv"
-    listen().status = nil
-    listen().act("check")
-    local engine = checked("engine")
-    assert.equals("kokoro", engine.action.name)
-
-    listen().status = nil
-    listen().act("kokoro")
-    engine = checked("engine", function(i) return i.action and i.action.name == "engine" end)
-    assert.equals("kokoro", engine.action.selected)
-    assert.equals("kokoro", listen().engine())
-    for _, name in ipairs({ "kokoro-v1.0.onnx", "voices-v1.0.bin", "kokoro.py" }) do
-      assert.truthy(io.open(listen().kokoro_dir() .. "/" .. name, "rb"), name)
-    end
-    local voice = checked("voice")
-    assert.equals("kokoro_voice", voice.action.name)
-    assert.equals("af_heart", voice.action.selected)
-    assert.equals("Heart, English (American), female", voice.detail)
-    assert.equals("English (British)", voice.action.choices[3].group)
-
-    listen().act("kokoro_voice", { choice = "bf_emma" })
-    assert.equals("bf_emma", listen().kokoro_voice())
-    local clip = make_clip()
-    local f = assert(io.open(bin .. ".ran", "rb"))
-    assert.matches("%-%-voice bf_emma", f:read("a"))
-    f:close()
-    os.remove(bin .. ".ran")
-    local text = listen().text(clip)
-    assert.equals(5, #text)
-    assert.truthy(math.abs(text[2].start - 0.9) < 0.01, tostring(text[2].start))
-
-    -- Back to Piper, at once.
-    assert.falsy(listen().use_engine("piper"))
-    assert.equals("piper", listen().engine())
-  end)
-
-  it("marks Piper optional while Kokoro reads", function()
-    local bin = plugin_test.dir .. "/test/bin/"
-    listen().uv = bin .. "fake-uv"
-    assert.falsy(listen().use_engine("kokoro"))
-    with({ piper = "no-such-piper" })
-    listen().status = nil
-    listen().act("check")
-    local piper = checked("piper")
-    assert.truthy(piper.optional)
-    assert.truthy(listen().status.ready)
   end)
 end)
