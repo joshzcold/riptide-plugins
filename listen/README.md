@@ -9,7 +9,8 @@ following along.
 read it into a clip, paragraph by paragraph. `:listen summary` asks
 [Ollama](https://ollama.com) for a short summary meant to be heard and reads
 that instead (`read = "summary"` makes it what `gA` does). It works in the
-background, so keep browsing; a message says when the clip is ready. Articles
+background, so keep browsing: a box in the top-right corner shows how far it's
+got (paragraph 7 of 24, about 1:20 left) and says when the clip is ready. Articles
 longer than about an hour of speech are cut there.
 
 `:listen-library` lists your clips, newest first, to play (at 0.75× to 2×),

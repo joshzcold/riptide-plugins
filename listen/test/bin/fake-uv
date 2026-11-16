@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # uv as listen runs it: "run --script kokoro.py" lists three voices, or reads
 # each line into half a second of silence as WAV, noting its arguments in .ran
-# beside this file and logging "Wrote PATH" as the real script does.
-import json, os, sys, wave
+# beside this file and logging "Wrote PATH" as the real script does. With .slow
+# beside it, each paragraph takes 0.4 s.
+import json, os, sys, time, wave
 
 here = os.path.dirname(os.path.abspath(__file__))
 args = sys.argv[1:]
@@ -14,7 +15,10 @@ with open(os.path.join(here, ".ran"), "w") as f:
     f.write(" ".join(args[3:]))
 out = args[args.index("--output_dir") + 1]
 lines = [line.strip() for line in sys.stdin if line.strip()]
+slow = os.path.exists(os.path.join(here, ".slow"))
 for n, line in enumerate(lines, 1):
+    if slow:
+        time.sleep(0.4)
     path = os.path.join(out, "%05d.wav" % n)
     with wave.open(path, "wb") as w:
         w.setnchannels(1)

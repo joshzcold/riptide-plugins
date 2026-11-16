@@ -162,6 +162,12 @@ function start(clip) {
   render();
 }
 
+function pendingText(job) {
+  if (job.stage === "summarizing") return "Summarizing";
+  if (job.stage === "compressing") return "Compressing";
+  return job.done ? `Reading (${job.done} of ${job.total})` : "Reading";
+}
+
 function render() {
   const words = $("filter").value.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = clips.filter((c) => {
@@ -169,7 +175,7 @@ function render() {
     return words.every((w) => text.includes(w));
   });
   $("pending").replaceChildren(
-    ...pending.map((j) => el("li", { className: "muted", textContent: `${j.stage === "speaking" ? "Reading" : "Summarizing"} “${j.title}”…` })),
+    ...pending.map((j) => el("li", { className: "muted", textContent: `${pendingText(j)} “${j.title}”…` })),
   );
   $("clips").replaceChildren(
     ...(shown.length

@@ -92,6 +92,30 @@ describe("listen", function()
     assert.matches("^listen: ready", last_message())
   end)
 
+  it("shows its progress in a float while it reads", function()
+    local function shown()
+      local text = {}
+      for _, line in ipairs(listen().progress or {}) do
+        for _, chunk in ipairs(line) do table.insert(text, chunk[1]) end
+        table.insert(text, "\n")
+      end
+      return table.concat(text)
+    end
+    io.open(bin .. ".slow", "w"):close()
+    run("open " .. page("article.html"))
+    wait_for("load_finished", { pattern = "plugin-test.localhost" })
+    listen().progress = nil
+    keys("gA")
+    local ok = pcall(wait_until, function() return shown():match("2 of 5 paragraphs") end, 8000)
+    os.remove(bin .. ".slow")
+    local during, job = shown(), listen().pending[1]
+    wait_until(function() return #listen().clips() == 1 end, 8000)
+    assert.truthy(ok, during)
+    assert.equals("Life in the tide pools\n" .. string.rep("█", 10) .. string.rep("░", 14) .. "  2 of 5 paragraphs\n", during)
+    assert.equals(5, job.total)
+    assert.equals("Life in the tide pools\nReady · 0:04 · :listen-library\n", shown())
+  end)
+
   it("reads a summary with :listen summary", function()
     local clip = make_clip("summary")
     assert.equals("summary", clip.mode)

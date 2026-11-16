@@ -328,8 +328,8 @@ end
 
 -- Reads paragraphs ({ text, heading }) into a clip, one part each, so
 -- each paragraph's start is known. callback(file, seconds) or (nil, nil, err);
--- the paragraphs get their start times.
-function M.speak(paragraphs, id, callback)
+-- the paragraphs get their start times. stage("compressing") says when ffmpeg starts.
+function M.speak(paragraphs, id, callback, stage)
   local dir = M.dir()
   local parts = dir .. "/" .. id .. ".parts"
   local wav = dir .. "/" .. id .. ".wav"
@@ -358,6 +358,7 @@ function M.speak(paragraphs, id, callback)
       local ffmpeg = program("ffmpeg")
       if not ffmpeg then return callback(id .. ".wav", seconds) end
       local ogg = dir .. "/" .. id .. ".ogg"
+      if stage then stage("compressing") end
       rt.spawn({ ffmpeg, "-y", "-loglevel", "error", "-i", wav, "-c:a", "libopus", "-b:a", "32k", ogg }, function(c)
         if c.code ~= 0 then return callback(id .. ".wav", seconds) end
         os.remove(wav)
@@ -371,6 +372,89 @@ local function done(job)
   for i, j in ipairs(M.pending) do
     if j == job then table.remove(M.pending, i) end
   end
+end
+
+local function clock(seconds)
+  local s = math.floor((seconds or 0) + 0.5)
+  return string.format("%d:%02d", s // 60, s % 60)
+end
+
+local function bar(n, total)
+  local width = 24
+  local filled = total > 0 and math.floor(width * n / total + 0.5) or 0
+  return string.rep("█", filled) .. string.rep("░", width - filled)
+end
+
+-- Each clip being made's float and ticker, kept off the job, which goes to the page.
+local views = {}
+
+-- What the float shows for job; result is { seconds } or { error } once it's done.
+local function progress_lines(job, result)
+  local lines = { { { job.title, "title" } } }
+  local now = os.time()
+  if result and result.error then
+    lines[2] = { { result.error, "error" } }
+  elseif result then
+    lines[2] = { { "Ready", "info" }, { " · " .. clock(result.seconds) .. " · ", "muted" }, { ":listen-library", "key" } }
+  elseif job.stage == "summarizing" then
+    lines[2] = { { "Ollama is writing a summary · " .. clock(now - job.started), "muted" } }
+  elseif job.stage == "compressing" then
+    lines[2] = { { bar(1, 1), "accent" }, { "  compressing to .ogg…", "muted" } }
+  elseif (job.done or 0) == 0 then
+    lines[2] = { { bar(0, 1), "accent" }, { "  starting Kokoro…", "muted" } }
+  else
+    local text = string.format("  %d of %d paragraphs", job.done, job.total)
+    -- Time per paragraph since the first, as the model's start isn't counted;
+    -- os.time() counts whole seconds, so only after a few.
+    if job.done >= 2 and job.done < job.total and now - job.first_at >= 3 then
+      local each = (now - job.first_at) / (job.done - 1)
+      text = text .. " · about " .. clock(each * (job.total - job.done)) .. " left"
+    end
+    lines[2] = { { bar(job.done, job.total), "accent" }, { text, "muted" } }
+  end
+  return lines
+end
+
+-- Draws job's float, unless it was closed; the last lines are kept for the tests.
+local function show(job, result)
+  local view = views[job]
+  if not view then return end
+  local lines = progress_lines(job, result)
+  M.progress = lines
+  local timeout = result and (result.error and 10000 or 5000) or nil
+  if view.float then
+    if view.float:is_open() then view.float:update({ lines = lines, timeout = timeout }) end
+  else
+    view.float = rt.ui.float({ title = "listen", lines = lines, position = "top-right", width = 70, timeout = timeout })
+  end
+end
+
+-- Follows job in a float until finish(job, result): the paragraphs Kokoro has
+-- written so far are in its parts folder.
+local function track(job)
+  job.started = os.time()
+  views[job] = {}
+  show(job)
+  views[job].ticker = rt.every(500, function()
+    if job.stage == "speaking" then
+      local n = job.done or 0
+      while exists(string.format("%s/%s.parts/%05d.wav", M.dir(), job.id, n + 1)) do n = n + 1 end
+      if n ~= (job.done or 0) then
+        if (job.done or 0) == 0 then job.first_at = os.time() end
+        job.done = n
+        refresh()
+      end
+    end
+    show(job)
+  end)
+end
+
+local function finish(job, result)
+  local view = views[job]
+  if not view then return end
+  view.ticker:stop()
+  show(job, result)
+  views[job] = nil
 end
 
 -- Makes a clip of the page: mode is "article" or "summary", else the read option's.
@@ -391,17 +475,19 @@ function M.make(mode)
     local job = { id = id, title = article.title, url = article.url, stage = mode == "summary" and "summarizing" or "speaking" }
     table.insert(M.pending, job)
     refresh()
-    notify((mode == "summary" and "summarizing “" or "reading “") .. article.title .. "”…")
+    track(job)
     local function fail(message)
       done(job)
       refresh()
+      finish(job, { error = message })
       notify(message, "error")
     end
 
     local function speak(paragraphs, summary)
-      job.stage = "speaking"
-      refresh()
       table.insert(paragraphs, 1, { text = article.title, heading = true })
+      job.stage = "speaking"
+      job.total = #paragraphs
+      refresh()
       M.speak(paragraphs, id, function(file, seconds, perr)
         if not file then return fail(perr) end
         local text_file = id .. ".json"
@@ -426,8 +512,13 @@ function M.make(mode)
         store.set("clips", clips)
         done(job)
         refresh()
+        finish(job, { seconds = seconds })
         local more = article.truncated and "; it's the first hour of a longer article" or ""
         notify("ready: “" .. article.title .. "”" .. more .. " (:listen-library)")
+      end, function(stage)
+        job.stage = stage
+        refresh()
+        show(job)
       end)
     end
 
