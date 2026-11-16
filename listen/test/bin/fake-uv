@@ -1,6 +1,29 @@
 #!/usr/bin/env python3
-# uv tool install piper-tts: notes its arguments in .installed beside this file.
-import os, sys
+# uv as listen runs it: "tool install piper-tts" notes its arguments in
+# .installed beside this file; "run --script kokoro.py" lists three voices, or
+# reads each line into half a second of silence as WAV, noting its arguments
+# in .ran and logging "Wrote PATH" as the real script does.
+import json, os, sys, wave
 
-with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".installed"), "w") as f:
-    f.write(" ".join(sys.argv[1:]))
+here = os.path.dirname(os.path.abspath(__file__))
+args = sys.argv[1:]
+if args[:1] == ["tool"]:
+    with open(os.path.join(here, ".installed"), "w") as f:
+        f.write(" ".join(args))
+    sys.exit(0)
+assert args[:2] == ["run", "--script"] and os.path.isfile(args[2]), args
+if "--list-voices" in args:
+    print(json.dumps(["af_heart", "am_michael", "bf_emma"]))
+    sys.exit(0)
+with open(os.path.join(here, ".ran"), "w") as f:
+    f.write(" ".join(args[3:]))
+out = args[args.index("--output_dir") + 1]
+lines = [line.strip() for line in sys.stdin if line.strip()]
+for n, line in enumerate(lines, 1):
+    path = os.path.join(out, "%05d.wav" % n)
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\0\0" * 12000)
+    print("Wrote " + path, file=sys.stderr)

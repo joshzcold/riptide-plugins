@@ -46,6 +46,8 @@ describe("listen", function()
     listen().status = nil
     listen().curl = plugin_test.dir .. "/test/bin/fake-curl"
     os.remove(plugin_test.dir .. "/test/bin/.pulled")
+    listen().uv = "uv"
+    listen().use_engine("piper")
     for _, clip in ipairs(listen().clips()) do listen().delete(clip.id) end
   end)
 
@@ -317,5 +319,55 @@ describe("listen", function()
     assert.falsy(install("ollama", "macos", false))
     assert.matches("astral.sh/uv/install.sh", install("uv", "macos", false))
     assert.falsy(install("curl", "windows"))
+  end)
+
+  it("installs Kokoro, reads with it and switches its voice", function()
+    local bin = plugin_test.dir .. "/test/bin/"
+    listen().uv = bin .. "fake-uv"
+    listen().status = nil
+    listen().act("check")
+    local engine = checked("engine")
+    assert.equals("kokoro", engine.action.name)
+
+    listen().status = nil
+    listen().act("kokoro")
+    engine = checked("engine", function(i) return i.action and i.action.name == "engine" end)
+    assert.equals("kokoro", engine.action.selected)
+    assert.equals("kokoro", listen().engine())
+    for _, name in ipairs({ "kokoro-v1.0.onnx", "voices-v1.0.bin", "kokoro.py" }) do
+      assert.truthy(io.open(listen().kokoro_dir() .. "/" .. name, "rb"), name)
+    end
+    local voice = checked("voice")
+    assert.equals("kokoro_voice", voice.action.name)
+    assert.equals("af_heart", voice.action.selected)
+    assert.equals("Heart, English (American), female", voice.detail)
+    assert.equals("English (British)", voice.action.choices[3].group)
+
+    listen().act("kokoro_voice", { choice = "bf_emma" })
+    assert.equals("bf_emma", listen().kokoro_voice())
+    local clip = make_clip()
+    local f = assert(io.open(bin .. ".ran", "rb"))
+    assert.matches("%-%-voice bf_emma", f:read("a"))
+    f:close()
+    os.remove(bin .. ".ran")
+    local text = listen().text(clip)
+    assert.equals(5, #text)
+    assert.truthy(math.abs(text[2].start - 0.9) < 0.01, tostring(text[2].start))
+
+    -- Back to Piper, at once.
+    assert.falsy(listen().use_engine("piper"))
+    assert.equals("piper", listen().engine())
+  end)
+
+  it("marks Piper optional while Kokoro reads", function()
+    local bin = plugin_test.dir .. "/test/bin/"
+    listen().uv = bin .. "fake-uv"
+    assert.falsy(listen().use_engine("kokoro"))
+    with({ piper = "no-such-piper" })
+    listen().status = nil
+    listen().act("check")
+    local piper = checked("piper")
+    assert.truthy(piper.optional)
+    assert.truthy(listen().status.ready)
   end)
 end)

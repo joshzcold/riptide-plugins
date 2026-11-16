@@ -255,6 +255,84 @@ function M.voice()
   if exists(saved) then return saved end
 end
 
+-- Kokoro: a second engine, more natural than Piper, also on your computer. It
+-- runs from a script in the data folder with `uv run --script`, which installs
+-- its Python packages; the model and voices are downloaded beside it.
+M.uv = "uv"
+M.KOKORO_BASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/"
+M.KOKORO_FILES = { "voices-v1.0.bin", "kokoro-v1.0.onnx" }
+local KOKORO_SCRIPT = require("listen.kokoro")
+local KOKORO_LANGUAGES = {
+  a = "English (American)", b = "English (British)", e = "Spanish", f = "French",
+  h = "Hindi", i = "Italian", p = "Portuguese (Brazilian)",
+}
+-- The voices Kokoro's authors grade best (hexgrad/Kokoro-82M VOICES.md).
+local KOKORO_BEST = { af_heart = true, af_bella = true }
+
+function M.kokoro_dir() return M.voices_dir() .. "/kokoro" end
+
+local function kokoro_path(name) return M.kokoro_dir() .. "/" .. name end
+
+-- Which engine reads: "piper" or "kokoro".
+function M.engine() return store.get("engine") == "kokoro" and "kokoro" or "piper" end
+
+function M.kokoro_voices() return store.get("kokoro_voices") or {} end
+
+-- The Kokoro voice to read with: the one picked, else af_heart, else the first.
+function M.kokoro_voice()
+  local voices = M.kokoro_voices()
+  local picked, fallback = store.get("kokoro_voice"), voices[1]
+  for _, v in ipairs(voices) do
+    if v == picked then return v end
+    if v == "af_heart" then fallback = v end
+  end
+  return fallback
+end
+
+function M.kokoro_ready()
+  if not locate(M.uv) or #M.kokoro_voices() == 0 then return false end
+  for _, name in ipairs(M.KOKORO_FILES) do
+    if not exists(kokoro_path(name)) then return false end
+  end
+  return true
+end
+
+-- "Heart, English (American), female".
+function M.kokoro_label(voice)
+  local lang, gender, name = voice:match("^(%a)(%a)_(.+)$")
+  if not lang then return voice end
+  name = name:gsub("_", " "):gsub("^%l", string.upper)
+  return name .. ", " .. (KOKORO_LANGUAGES[lang] or lang) .. ", " .. (gender == "f" and "female" or "male")
+end
+
+-- Writes the script when it's missing or another version; returns its path.
+local function kokoro_script()
+  local path = kokoro_path("kokoro.py")
+  local f = io.open(path, "rb")
+  local current = f and f:read("a")
+  if f then f:close() end
+  if current ~= KOKORO_SCRIPT then
+    local w = io.open(path, "wb")
+    if not w then return nil end
+    w:write(KOKORO_SCRIPT)
+    w:close()
+  end
+  return path
+end
+
+local function kokoro_argv(...)
+  local argv = { locate(M.uv) or M.uv, "run", "--script", kokoro_script(),
+    "--model", kokoro_path("kokoro-v1.0.onnx"), "--voices", kokoro_path("voices-v1.0.bin") }
+  for _, a in ipairs({ ... }) do table.insert(argv, a) end
+  return argv
+end
+
+-- Whether the engine that reads is set up.
+function M.ready()
+  if M.engine() == "kokoro" then return M.kokoro_ready() end
+  return program("piper") ~= nil and exists(M.voice())
+end
+
 local function model() return opts.model or "llama3.2" end
 
 local function endpoint() return (opts.ollama or "http://localhost:11434"):gsub("/+$", "") end
@@ -400,7 +478,8 @@ function M.speak(paragraphs, id, callback)
   for i, p in ipairs(paragraphs) do lines[i] = p.text end
   rt.spawn({ "mkdir", "-p", parts }, function(made)
     if made.code ~= 0 then return callback(nil, nil, "couldn't make " .. parts .. ": " .. trim(made.stderr)) end
-    local argv = { program("piper") or "piper", "--model", M.voice(), "--output_dir", parts }
+    local argv = M.engine() == "kokoro" and kokoro_argv("--voice", M.kokoro_voice(), "--output_dir", parts)
+      or { program("piper") or "piper", "--model", M.voice(), "--output_dir", parts }
     rt.spawn(argv, { stdin = table.concat(lines, "\n") .. "\n" }, function(r)
       local paths = written(r)
       local function cleanup()
@@ -439,8 +518,8 @@ end
 -- Makes a clip of the page: mode is "article" or "summary", else the read option's.
 function M.make(mode)
   if mode ~= "article" and mode ~= "summary" then mode = M.mode() end
-  if not program("piper") or not exists(M.voice()) then
-    notify("piper and a voice aren't set up yet; see the setup on this page", "error")
+  if not M.ready() then
+    notify((M.engine() == "kokoro" and "Kokoro isn't" or "piper and a voice aren't") .. " set up yet; see the setup on this page", "error")
     return M.library()
   end
   local url = rt.url()
@@ -720,11 +799,33 @@ end
 -- The checks that don't need Ollama to answer, in the order the page lists them.
 function M.local_checks()
   local items = {}
+  local kokoro = M.engine() == "kokoro"
+
+  local engine = { id = "engine", name = "Engine", ok = true, busy_text = "Installing Kokoro: about 350 MB to download…" }
+  if M.kokoro_ready() then
+    engine.detail = kokoro and "Kokoro" or "Piper"
+    engine.action = { name = "engine", label = "Use", selected = M.engine(), keep = true, choices = {
+      { value = "kokoro", label = "Kokoro, more natural", button = "Use" },
+      { value = "piper", label = "Piper, more voices and languages", button = "Use" },
+    } }
+  elseif locate(M.uv) then
+    engine.detail = "Piper. Kokoro reads more naturally, also on your computer; installing it downloads about 350 MB"
+    engine.action = { name = "kokoro", label = "Install Kokoro", keep = true }
+  else
+    engine.detail = "Piper. Kokoro reads more naturally, also on your computer; it needs uv to install"
+    engine.commands = commands(install("uv"))
+  end
+  table.insert(items, failed("kokoro", engine))
+
   local piper = program("piper")
   if piper then
     table.insert(items, { id = "piper", name = "Piper", ok = true, detail = piper })
   else
     local item = { id = "piper", name = "Piper", ok = false, detail = "reads the summary aloud; it isn't installed" }
+    if kokoro then
+      item.optional = true
+      item.detail = "not needed while Kokoro reads"
+    end
     local found = {}
     for _, tool in ipairs(M.installers) do
       if locate(tool.program) then table.insert(found, { value = tool.name, label = tool.name }) end
@@ -743,7 +844,29 @@ function M.local_checks()
 
   local voice = M.voice()
   local configured = opts.voice and opts.voice ~= ""
-  if configured and exists(voice) then
+  if kokoro then
+    local current = M.kokoro_voice()
+    local choices = {}
+    for _, v in ipairs(M.kokoro_voices()) do
+      local lang, gender, name = v:match("^(%a)(%a)_(.+)$")
+      table.insert(choices, {
+        value = v,
+        group = KOKORO_LANGUAGES[lang] or lang,
+        label = name:gsub("_", " "):gsub("^%l", string.upper) .. " · " .. (gender == "f" and "female" or "male")
+          .. (KOKORO_BEST[v] and " · best" or ""),
+        button = "Use",
+      })
+    end
+    table.insert(items, {
+      id = "voice",
+      name = "Voice",
+      ok = current ~= nil,
+      detail = current and M.kokoro_label(current) or "Kokoro has no voices",
+      action = { name = "kokoro_voice", label = "Use", choices = choices, selected = current,
+        group = KOKORO_LANGUAGES[(current or "a"):sub(1, 1)], keep = true },
+      link = { url = "https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md", text = "Kokoro's voices and their grades" },
+    })
+  elseif configured and exists(voice) then
     table.insert(items, { id = "voice", name = "Voice", ok = true,
       detail = voice .. ", from the voice option in your config; remove it to pick one here" })
   elseif configured then
@@ -932,6 +1055,71 @@ local function download_voice(key, done)
   end)
 end
 
+local function install_kokoro(done)
+  local uv = locate(M.uv)
+  if not uv then return done("uv isn't installed") end
+  local files = {}
+  for _, name in ipairs(M.KOKORO_FILES) do
+    if not exists(kokoro_path(name)) then table.insert(files, name) end
+  end
+  local function list_voices()
+    local script = kokoro_script()
+    if not script then return done("couldn't write " .. kokoro_path("kokoro.py")) end
+    -- The first run installs Kokoro's Python packages.
+    rt.spawn(kokoro_argv("--list-voices"), function(r)
+      local ok, voices = pcall(rt.json.decode, (r.stdout or ""):match("%[.*%]") or "")
+      if r.code ~= 0 or not ok or type(voices) ~= "table" or #voices == 0 then
+        local why = trim(r.error or r.stderr):match("[^\n]*$")
+        return done("Kokoro couldn't start: " .. why)
+      end
+      store.set("kokoro_voices", voices)
+      store.set("engine", "kokoro")
+      notify("Kokoro is installed; reading with it from now on")
+      done()
+    end)
+  end
+  local function fetch(i)
+    local name = files[i]
+    if not name then return list_voices() end
+    local path = kokoro_path(name)
+    rt.spawn({ M.curl, "-fsSL", "--retry", "2", "-o", path .. ".part", M.KOKORO_BASE .. name }, function(r)
+      if r.code ~= 0 then
+        os.remove(path .. ".part")
+        return done("couldn't download " .. name .. ": " .. trim(r.error or r.stderr))
+      end
+      os.rename(path .. ".part", path)
+      fetch(i + 1)
+    end)
+  end
+  rt.spawn({ "mkdir", "-p", M.kokoro_dir() }, function(made)
+    if made.code ~= 0 then return done("couldn't make " .. M.kokoro_dir() .. ": " .. trim(made.stderr)) end
+    fetch(1)
+  end)
+end
+
+-- Reads with "kokoro" or "piper" from now on; an error if Kokoro isn't installed.
+function M.use_engine(name)
+  if name == "kokoro" and not M.kokoro_ready() then return "Kokoro isn't installed" end
+  store.set("engine", name == "kokoro" and "kokoro" or "piper")
+end
+
+local function use_engine(name, done)
+  local err = M.use_engine(name)
+  if not err then notify("reading with " .. (name == "kokoro" and "Kokoro" or "Piper") .. " from now on") end
+  done(err)
+end
+
+local function use_kokoro_voice(voice, done)
+  for _, v in ipairs(M.kokoro_voices()) do
+    if v == voice then
+      store.set("kokoro_voice", v)
+      notify("reading with " .. M.kokoro_label(v) .. " from now on")
+      return done()
+    end
+  end
+  done("Kokoro has no voice " .. tostring(voice))
+end
+
 local function install_piper(choice, done)
   local tool
   for _, t in ipairs(M.installers) do
@@ -949,7 +1137,8 @@ local function install_piper(choice, done)
   end)
 end
 
--- A step the page asked for: "pull", "voice" or "piper" (with data.choice).
+-- A step the page asked for: "pull", "voice", "piper", "engine" or
+-- "kokoro_voice" (with data.choice), or "kokoro" to install Kokoro.
 function M.act(name, data)
   if name == "pull" then
     step("pull", pull)
@@ -957,6 +1146,18 @@ function M.act(name, data)
     step("voice", function(done) download_voice(data and data.choice or M.VOICES[1].key, done) end)
   elseif name == "piper" then
     step("piper", function(done) install_piper(data and data.choice, done) end)
+  elseif name == "kokoro" then
+    step("kokoro", install_kokoro)
+  elseif name == "engine" then
+    use_engine(data and data.choice, function(err)
+      if err then notify(err, "error") end
+      broadcast()
+    end)
+  elseif name == "kokoro_voice" then
+    use_kokoro_voice(data and data.choice, function(err)
+      if err then notify(err, "error") end
+      broadcast()
+    end)
   elseif name == "check" then
     broadcast()
   end

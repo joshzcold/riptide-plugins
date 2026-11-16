@@ -48,6 +48,15 @@ it either does it for you or shows the command for your system:
   clips use it; earlier clips keep the voice they were read in. Voices with
   several speakers read with the first. If the list can't be fetched, a few
   English voices are offered.
+- **Engine**: Piper reads by default. **Install Kokoro** downloads
+  [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (about 350 MB, from
+  [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)), which sounds
+  much more natural and also runs on your computer, on the CPU. It needs
+  [uv](https://docs.astral.sh/uv/): listen writes a small script into
+  `voices/kokoro/` and runs it with `uv run --script`, which installs its
+  Python packages the first time. Kokoro has 41 voices in English (American
+  and British), Spanish, French, Hindi, Italian and Brazilian Portuguese, picked
+  in the Voice row like Piper's; you can switch between the engines any time.
 - **ffmpeg** (optional): the install command.
 
 Install commands are given for Debian and Ubuntu (and their derivatives),
