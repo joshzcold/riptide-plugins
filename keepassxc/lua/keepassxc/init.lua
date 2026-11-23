@@ -57,12 +57,13 @@ function M.new(opts)
     return out
   end
 
-  local function with_password(cb)
+  local function with_password(cb, progress)
     if cached and remember > 0 and os.time() - cached_at < remember then
       return cb(cached)
     end
     cached = nil
     local function ask()
+      progress("waiting for the database password")
       rt.ui.input({ prompt = "KeePassXC database password", secret = true }, function(password)
         if not password then
           return cb(nil)
@@ -83,12 +84,14 @@ function M.new(opts)
     end
   end
 
-  function backend.find(host, cb)
+  function backend.find(host, cb, progress)
+    progress = progress or function() end
     with_password(function(password)
       if not password then
         return cb(nil)
       end
       local input = { stdin = password .. "\n" }
+      progress("opening the database")
       site.run(rt.spawn, argv("search", site.search_term(host)), input, function(out)
         local paths = {}
         for _, path in ipairs(site.lines(out)) do
@@ -96,6 +99,7 @@ function M.new(opts)
             table.insert(paths, path)
           end
         end
+        progress("reading entries", 0, #paths)
         site.each(paths, function(path, done)
           site.run(rt.spawn, argv("show", "-s", "-a", "Title", "-a", "UserName", "-a", "Password", "-a", "URL", path), input,
             function(shown)
@@ -111,13 +115,15 @@ function M.new(opts)
               done({ label = label, saved = { url, title }, login = { username = username ~= "" and username or nil, password = pass } })
             end,
             function() done(nil) end)
-        end, function(entries) cb(entries) end)
+        end, function(entries) cb(entries) end, function(n, total)
+          progress("reading entries", n, total)
+        end)
       end, function(err)
         -- Most likely a wrong password; don't keep it.
         cached = nil
         cb(nil, err)
       end)
-    end)
+    end, progress)
   end
 
   function backend.get(entry, cb)

@@ -22,21 +22,35 @@ local function open_login()
   run("open " .. page("login.html"))
   wait_for("load_finished", { pattern = "plugin-test.localhost" })
 end
+-- The passwords picker, once its logins have arrived.
+local function open_picker()
+  local passwords = require("passwords")
+  wait_until(function()
+    local p = passwords.picker()
+    return p and p.ready
+  end)
+  wait(200)
+  return passwords.picker()
+end
+
 describe("pass", function()
   it("offers the site's entries and fills the one picked", function()
     open_login()
     run("password-fill")
-    -- Two entries belong here; the lookalike sites' don't. The picker's keys
-    -- follow the entries' order.
-    wait(500)
-    keys("1")
+    -- Two entries belong here; the lookalike sites' don't.
+    local picker = open_picker()
+    picker.type("alice")
+    wait(200)
+    picker.key("Enter")
     wait_field("pass", "pw-alice")
     assert.equals("alice@example.com", field("user"))
 
     -- The username alone, from the path after the site.
     run("password-fill-username")
-    wait(500)
-    keys("2")
+    picker = open_picker()
+    picker.type("bob")
+    wait(200)
+    picker.key("Enter")
     wait_field("user", "bob")
     assert.equals("pw-alice", field("pass"), "only the username changed")
   end)

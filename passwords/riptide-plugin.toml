@@ -1,6 +1,7 @@
 name = "passwords"
 description = "Fill logins from your password managers; add pass, rbw, bitwarden or keepassxc for one"
-riptide = ">=0.4"
+# Centred float pages that take every key, for the login picker.
+riptide = ">=0.8"
 
 [permissions]
 # Fills login forms on the site you're on, and only that site. It runs no

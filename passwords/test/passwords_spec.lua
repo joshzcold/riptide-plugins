@@ -26,6 +26,26 @@ local function open_login()
   run("open " .. page("login.html"))
   wait_for("load_finished", { pattern = "plugin-test.localhost" })
 end
+-- The open picker, once its logins have arrived.
+local function open_picker()
+  wait_until(function()
+    local p = passwords().picker()
+    return p and p.ready
+  end)
+  wait(200)
+  return passwords().picker()
+end
+
+-- The status float's text, one line each.
+local function status()
+  local text = {}
+  for _, line in ipairs(passwords().status or {}) do
+    for _, chunk in ipairs(line) do table.insert(text, chunk[1]) end
+    table.insert(text, "\n")
+  end
+  return table.concat(text)
+end
+
 local function login(label, saved, username, password)
   return { label = label, saved = saved, login = { username = username, password = password } }
 end
@@ -33,8 +53,9 @@ end
 -- A password manager that knows `entries`, answering after `delay` ms.
 local function fake(entries, delay)
   return {
-    find = function(_, cb)
+    find = function(_, cb, progress)
       if delay then
+        progress("reading entries", 1, 2)
         rt.defer(delay, function() cb(entries) end)
       else
         cb(entries)
@@ -69,10 +90,46 @@ describe("passwords", function()
     passwords().register("one", fake({ login("a", { "plugin-test.localhost" }, "a", "pw-a") }))
     passwords().register("two", fake({ login("b", { "plugin-test.localhost" }, "b", "pw-b") }))
     run("password-fill-password")
-    wait(300)
-    keys("2")
+    local picker = open_picker()
+    picker.type("two")
+    wait(200)
+    picker.key("Enter")
     wait_field("pass", "pw-b")
     assert.equals("", field("user"), "only the password")
+    assert.equals(nil, passwords().picker(), "the picker closed")
+  end)
+
+  it("searches the site's logins with :password-search, even for one", function()
+    passwords().register("one", fake({ login("here", { "plugin-test.localhost" }, "ann", "pw-ann") }))
+    run("password-search")
+    local picker = open_picker()
+    picker.key("A-u")
+    wait_field("user", "ann")
+    assert.equals("", field("pass"), "only the username")
+    wait_until(function() return status():find("✓ Filled the username of here", 1, true) end)
+  end)
+
+  it("fills nothing when the picker is closed", function()
+    passwords().register("one", fake({ login("a", { "plugin-test.localhost" }, "a", "pw-a") }))
+    passwords().register("two", fake({ login("b", { "plugin-test.localhost" }, "b", "pw-b") }))
+    run("password-fill")
+    open_picker().key("Escape")
+    wait_until(function() return passwords().picker() == nil end)
+    wait(300)
+    assert.equals("", field("pass"))
+  end)
+
+  it("shows each password manager's progress while it looks", function()
+    passwords().register("one", fake({ login("here", { "plugin-test.localhost" }, "ann", "pw-ann") }, 1500))
+    passwords().register("two", fake({}))
+    run("password-fill")
+    wait_until(function() return status():find("reading entries 1 of 2", 1, true) end)
+    local during = status()
+    assert.matches("Logins for plugin%-test%.localhost\n", during)
+    assert.truthy(during:find(string.rep("█", 8) .. string.rep("░", 8), 1, true), during)
+    assert.truthy(during:find("✓ two  0 logins", 1, true), during)
+    wait_field("pass", "pw-ann")
+    wait_until(function() return status():find("✓ Filled here", 1, true) end)
   end)
 
   it("says when no login is saved for the site", function()

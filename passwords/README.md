@@ -12,14 +12,22 @@ one with it.
 | [keepassxc](../keepassxc) | a KeePassXC database (`keepassxc-cli`) |
 
 `<Space>pp` (`:password-fill`) fills the username and password, `<Space>pu`
-the username and `<Space>pw` the password. With several password managers on,
-the picker lists the logins of all of them. Add this plugin yourself only to
-change its options:
+the username and `<Space>pw` the password. While the password managers unlock
+and search, a box in the top-right corner shows how each is getting on, then
+what was filled.
+
+When the site has several logins, a picker opens over the page: type to filter
+them, Enter fills, Alt-u fills only the username and Alt-p only the password.
+`<Space>ps` (`:password-search`) opens it even for one login. With several
+password managers on, it lists the logins of all of them. The picker only sees
+each login's name; the passwords stay with the plugin.
+
+Add this plugin yourself only to change its options:
 
 ```lua
 rt.pack.add({ "https://github.com/joshzcold/riptide-plugins", subdir = "passwords", opts = {
   submit = true,                        -- press the form's button after :password-fill
-  keys = { login = "<Ctrl-Shift-l>" },  -- your own keys; false for none
+  keys = { login = "<Ctrl-Shift-l>", search = "<Ctrl-Shift-k>" },  -- your own keys; false for none
 } })
 ```
 

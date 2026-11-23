@@ -15,7 +15,9 @@ function M.new(opts)
   local cmd = command(opts)
   local backend = {}
 
-  function backend.find(host, cb)
+  function backend.find(host, cb, progress)
+    progress = progress or function() end
+    progress("searching")
     site.run(rt.spawn, { cmd, "search", "--fields", "id,name,user", site.search_term(host) }, nil, function(out)
       local found = {}
       for _, line in ipairs(site.lines(out)) do
@@ -24,6 +26,7 @@ function M.new(opts)
           table.insert(found, { id = id, name = name, user = user })
         end
       end
+      progress("reading entries", 0, #found)
       site.each(found, function(item, done)
         site.run(rt.spawn, { cmd, "get", "--raw", item.id }, nil, function(raw)
           local ok, cipher = pcall(rt.json.decode, raw)
@@ -46,6 +49,8 @@ function M.new(opts)
         end, function() done(nil) end)
       end, function(entries)
         cb(entries)
+      end, function(n, total)
+        progress("reading entries", n, total)
       end)
     end, function(err) cb(nil, err) end)
   end

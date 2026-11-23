@@ -67,8 +67,9 @@ function M.search_term(host)
 end
 
 -- Run `step(item, done)` for each item at once; `finish(results)` gets the
--- non-nil results, in the items' order, once all are done.
-function M.each(items, step, finish)
+-- non-nil results, in the items' order, once all are done. `tick(n, total)`,
+-- if given, hears each one finish.
+function M.each(items, step, finish, tick)
   local results, left = {}, #items
   if left == 0 then
     return finish({})
@@ -77,6 +78,7 @@ function M.each(items, step, finish)
     step(item, function(result)
       results[i] = result or false
       left = left - 1
+      if tick then tick(#items - left, #items) end
       if left == 0 then
         local out = {}
         for j = 1, #items do
