@@ -13,7 +13,8 @@ local bound = {}
 
 -- A password manager plugin's backend: find(host, cb, progress) gives cb a
 -- list of { label, saved = { addresses, names or path parts }, ... } or
--- (nil, err), and may call progress(text, n, total) as it works;
+-- (nil, err), and may call progress(text, n, total, asking) as it works, with
+-- asking true just before it asks for a password;
 -- get(entry, cb) gives cb { username, password } or (nil, why); forget(),
 -- if any, drops an unlocked session. `backend` nil removes one.
 function M.register(name, backend)
@@ -65,13 +66,24 @@ local function status_lines(s)
   return lines
 end
 
+-- Whether a float shown now would take the keyboard from a question: riptide
+-- leaves a newly shown float with the keyboard while it asks something.
+local function asking(s)
+  local mode = rt.mode()
+  if mode == "prompt" or mode == "yesno" then return true end
+  for _, row in ipairs(s.rows) do
+    if row.asking then return true end
+  end
+  return false
+end
+
 local function draw(s, timeout)
   if status ~= s then return end
   local lines = status_lines(s)
   M.status = lines
   if s.float then
     if s.float:is_open() then s.float:update({ lines = lines, timeout = timeout }) end
-  elseif s.shown or timeout then
+  elseif (s.shown or timeout) and not asking(s) then
     s.float = rt.ui.float({ title = "passwords", lines = lines, position = "top-right", width = 64, timeout = timeout })
   end
 end
@@ -137,9 +149,14 @@ local function ask_backend(s, name, host, done)
     end
     draw(s)
     done({ name = name, entries = entries, err = err })
-  end, function(text, n, total)
+  end, function(text, n, total, asks)
     if answered then return end
-    row.text, row.n, row.total = text, n, total
+    row.text, row.n, row.total, row.asking = text, n, total, asks == true
+    -- A float still being shown when the question opens would take its keyboard.
+    if row.asking and s.float then
+      s.float:close()
+      s.float = nil
+    end
     draw(s)
   end)
 end
@@ -185,6 +202,11 @@ local function use(choice, host, what)
     local filled = what == "login" and "Filled " or ("Filled the " .. what .. " of ")
     M.end_status("✓ " .. filled .. choice.entry.label)
   end)
+end
+
+-- Whether the status float is open, for the tests.
+function M.status_open()
+  return status ~= nil and status.float ~= nil and status.float:is_open()
 end
 
 -- The open picker page, if any.

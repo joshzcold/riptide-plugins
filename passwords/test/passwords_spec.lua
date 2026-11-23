@@ -132,6 +132,31 @@ describe("passwords", function()
     wait_until(function() return status():find("✓ Filled here", 1, true) end)
   end)
 
+  it("shows no status float while a password manager asks for its password", function()
+    -- A float shown during a question takes riptide's keyboard from it.
+    local typed
+    passwords().register("one", {
+      find = function(_, cb, progress)
+        progress("waiting for your master password", nil, nil, true)
+        rt.ui.input({ prompt = "Master password", secret = true }, function(text)
+          typed = text
+          progress("unlocking the vault")
+          rt.defer(800, function() cb({ login("here", { "plugin-test.localhost" }, "ann", "pw-ann") }) end)
+        end)
+      end,
+      get = function(entry, cb) cb(entry.login) end,
+    })
+    passwords().register("two", fake({}, 3000))
+    run("password-fill")
+    wait(800)
+    assert.falsy(passwords().status_open(), "no float during the question")
+    keys("hunter2<Return>")
+    wait_until(function() return typed ~= nil end)
+    assert.equals("hunter2", typed)
+    wait_until(function() return passwords().status_open() end)
+    wait_field("pass", "pw-ann")
+  end)
+
   it("says when no login is saved for the site", function()
     passwords().register("one", fake({}))
     run("password-fill")

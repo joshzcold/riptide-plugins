@@ -36,7 +36,7 @@ function M.new(opts)
         function(err) cb(nil, err) end)
     end
     local function ask()
-      progress("waiting for your master password")
+      progress("waiting for your master password", nil, nil, true)
       rt.ui.input({ prompt = "Bitwarden master password", secret = true }, with)
     end
     -- The master password saved on the Plugins tab, from the OS keyring (riptide 0.4+).

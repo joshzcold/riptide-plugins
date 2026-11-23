@@ -63,7 +63,7 @@ function M.new(opts)
     end
     cached = nil
     local function ask()
-      progress("waiting for the database password")
+      progress("waiting for the database password", nil, nil, true)
       rt.ui.input({ prompt = "KeePassXC database password", secret = true }, function(password)
         if not password then
           return cb(nil)
