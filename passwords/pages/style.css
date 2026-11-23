@@ -1,0 +1,109 @@
+:root {
+  --bg: #1e1e2e;
+  --fg: #cdd6f4;
+  --muted: #7f849c;
+  --line: #313244;
+  --selected: #45475a;
+  --match: #f9e2af;
+  --accent: #89b4fa;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eff1f5;
+    --fg: #4c4f69;
+    --muted: #8c8fa1;
+    --line: #ccd0da;
+    --selected: #dce0e8;
+    --match: #df8e1d;
+    --accent: #1e66f5;
+  }
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.5 ui-monospace, monospace;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sign {
+  color: var(--accent);
+}
+
+#prompt {
+  flex: 1;
+  white-space: pre;
+}
+
+.cursor {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+#count {
+  color: var(--muted);
+}
+
+#list {
+  flex: 1;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+#list li {
+  display: flex;
+  gap: 10px;
+  padding: 1px 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#list li.selected {
+  background: var(--selected);
+}
+
+.manager {
+  flex: 0 0 10ch;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.label {
+  flex: 1 1 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#list li.empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+b {
+  color: var(--match);
+}
+
+#help {
+  padding: 4px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}

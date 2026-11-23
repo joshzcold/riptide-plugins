@@ -17,7 +17,7 @@ function M.new(opts)
   local session
   local backend = {}
 
-  local function unlock(cb)
+  local function unlock(cb, progress)
     if session then
       return cb(session)
     end
@@ -26,6 +26,7 @@ function M.new(opts)
       if not password or password == "" then
         return cb(nil)
       end
+      progress("unlocking the vault")
       site.run(rt.spawn, { cmd, "unlock", "--passwordenv", "RT_BW_PASSWORD", "--raw" },
         { env = { RT_BW_PASSWORD = password } },
         function(out)
@@ -35,6 +36,7 @@ function M.new(opts)
         function(err) cb(nil, err) end)
     end
     local function ask()
+      progress("waiting for your master password")
       rt.ui.input({ prompt = "Bitwarden master password", secret = true }, with)
     end
     -- The master password saved on the Plugins tab, from the OS keyring (riptide 0.4+).
@@ -47,11 +49,13 @@ function M.new(opts)
     end
   end
 
-  local function search(host, cb, retried)
+  local function search(host, cb, progress, retried)
+    progress = progress or function() end
     unlock(function(key, err)
       if not key then
         return cb(nil, err)
       end
+      progress("searching the vault")
       site.run(rt.spawn, { cmd, "list", "items", "--search", site.search_term(host) }, { env = { BW_SESSION = key } },
         function(out)
           local ok, items = pcall(rt.json.decode, out)
@@ -83,9 +87,9 @@ function M.new(opts)
           if retried or not (e:lower():find("lock") or e:lower():find("session")) then
             return cb(nil, e)
           end
-          search(host, cb, true)
+          search(host, cb, progress, true)
         end)
-    end)
+    end, progress)
   end
 
   backend.find = search

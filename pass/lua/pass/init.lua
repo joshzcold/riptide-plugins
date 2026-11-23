@@ -49,7 +49,8 @@ function M.new(opts)
   local cmd = command(opts)
   local backend = {}
 
-  function backend.find(host, cb)
+  function backend.find(host, cb, progress)
+    if progress then progress("listing the store") end
     local argv, run_opts
     if gopass then
       argv = { cmd, "ls", "--flat" }
